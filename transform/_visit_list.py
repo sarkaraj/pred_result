@@ -48,6 +48,12 @@ def _get_visit_list(sc, sqlContext):
         sqlContext.createDataFrame(vl, schema=_schema_vl()) \
             .select(col('KUNNR'), col('DATE_SENT')) \
             .withColumn('del_date', from_unixtime(unix_timestamp(col('DATE_SENT'), "yyyy.MM.dd")).cast(DateType())) \
-            .filter(col('del_date') == str(np.busday_offset('2017-09-12', 2, roll='forward')))
+            .filter(col('del_date') == str(np.busday_offset('2017-09-14', 2, roll='forward')))
 
     return vl_df
+
+
+if __name__ == "__main__":
+    import numpy as np
+
+    print (np.busday_offset('2017-09-14', 2, roll='forward'))

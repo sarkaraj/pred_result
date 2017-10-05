@@ -1,19 +1,24 @@
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import HiveContext
-# from pyspark.sql.types import *
+from pyspark.sql.types import *
 from pyspark.sql.functions import *
 from transform._visit_list import _get_visit_list
 from transform._aglu_list import _get_aglu_list
+from transform._invoice_latest import _get_invoice_data
+from transform._prediction_list import _get_prediction_list
+from properties import conversion_denominator
+from support_func import get_current_date
 
-conf = SparkConf().setAppName("CSO_TESTING_")
-# .setMaster("yarn-client")
+appName = "_".join(["CSO_TESTING_", get_current_date()])
+conf = SparkConf().setAppName(appName)
+
 sc = SparkContext(conf=conf)
 sqlContext = HiveContext(sparkContext=sc)
 
 print "Setting LOG LEVEL as ERROR"
 sc.setLogLevel("ERROR")
 
-print "Add jobs.zip to system path"
+print "Add cso.zip to system path"
 import sys
 
 sys.path.insert(0, "cso.zip")
@@ -54,4 +59,53 @@ visit_list_final = sqlContext.sql(q)
 
 visit_list_final.show()
 
-# print visit_list_final.count()
+invoice_raw = _get_invoice_data(sc=sc, sqlContext=sqlContext)
+
+# cond = [arima_results.customernumber_arima == prophet_results.customernumber_prophet, arima_results.mat_no_arima == prophet_results.mat_no_prophet]
+# prophet_arima_join_df = prophet_results\
+#     .join(arima_results, on=cond, how='outer')
+
+visit_invoice_condition = [visit_list_final.customernumber == invoice_raw.customernumber,
+                           visit_list_final.matnr == invoice_raw.matnr]
+visit_list_final_join_invoice_raw = visit_list_final \
+    .join(invoice_raw, on=visit_invoice_condition, how='inner') \
+    .select(visit_list_final.customernumber,
+            visit_list_final.matnr,
+            visit_list_final.del_date,
+            visit_list_final.scl_auth_matlst,
+            visit_list_final.vkbur,
+            invoice_raw.bill_date)
+
+prediction_data = _get_prediction_list(sc=sc, sqlContext=sqlContext)
+
+visit_pred_condition = [visit_list_final_join_invoice_raw.customernumber == prediction_data.customernumber,
+                        visit_list_final_join_invoice_raw.matnr == prediction_data.matnr]
+
+final_df = visit_list_final_join_invoice_raw \
+    .join(prediction_data, on=visit_pred_condition, how='inner') \
+    .drop(prediction_data.customernumber) \
+    .drop(prediction_data.matnr) \
+    .withColumn('last_del_date', from_unixtime(unix_timestamp(col('bill_date'), "yyyyMMdd")).cast(DateType())) \
+    .drop(col('bill_date')) \
+    .withColumn('_diff_day', datediff(col('del_date'), col('last_del_date'))) \
+    .withColumn('quantity',
+                when(col('pdt_cat') == 'I', round((col('pred_val') / 7) * col('_diff_day')))
+                .when(col('pdt_cat') == 'II', round((col('pred_val') / 7) * col('_diff_day')))
+                .when(col('pdt_cat') == 'III', round((col('pred_val') / 7) * col('_diff_day')))
+                .when(col('pdt_cat') == 'VII', round((col('pred_val') / 7) * col('_diff_day')))
+                .otherwise(round((col('pred_val') / 31) * col('_diff_day')))) \
+    .repartition(10)
+
+final_df.show()
+# final_df.printSchema()
+
+print final_df.count()
+
+final_df.coalesce(2) \
+    .write.mode('overwrite') \
+    .format('orc') \
+    .option("header", "false") \
+    .save("/CONA_CSO/final_predicted")
+
+
+# .coalesce(1)
