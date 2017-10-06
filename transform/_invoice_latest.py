@@ -1,7 +1,5 @@
-from properties import CRITERIA_DATE
-
-
-def _get_invoice_data(sc, sqlContext):
+def _get_invoice_data(sqlContext, **kwargs):
+    CRITERIA_DATE = kwargs.get('CRITERIA_DATE')
     q_2 = """
     select a.kunag customernumber, a.matnr matnr, max(a.fkdat) bill_date
     from skuopt.invoices a
