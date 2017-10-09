@@ -1,5 +1,5 @@
-from pyspark.sql.types import *
-from pyspark.sql.functions import *
+# from pyspark.sql.types import *
+# from pyspark.sql.functions import *
 import numpy as np
 import datetime as dt
 from properties import VISIT_LIST_LOCATION
@@ -46,9 +46,9 @@ def _get_visit_list(sc, sqlContext, order_date):
 
     vl_df = \
         sqlContext.createDataFrame(vl, schema=_schema_vl()) \
-            .select(col('KUNNR'), col('DATE_SENT')) \
-            .withColumn('del_date', from_unixtime(unix_timestamp(col('DATE_SENT'), "yyyy.MM.dd")).cast(DateType())) \
-            .filter(col('del_date') == str(np.busday_offset(order_date, 2, roll='forward')))
+            .select(col('KUNNR'), col('EXDAT')) \
+            .withColumn('order_date', from_unixtime(unix_timestamp(col('DATE_SENT'), "yyyy.MM.dd")).cast(DateType())) \
+            .filter(col('order_date') == order_date)
 
     return vl_df
 
@@ -56,4 +56,5 @@ def _get_visit_list(sc, sqlContext, order_date):
 if __name__ == "__main__":
     import numpy as np
 
-    print (np.busday_offset('2017-09-15', 2, roll='forward'))
+    print np.busday_offset('2017-09-15', 2, roll='forward')
+    print str(np.busday_offset('2017-09-15', 2, roll='forward'))
