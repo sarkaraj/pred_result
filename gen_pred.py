@@ -7,7 +7,7 @@ from transform._aglu_list import _get_aglu_list
 from transform._invoice_latest import _get_invoice_data
 from transform._prediction_list import _get_prediction_list
 from support_func import get_current_date, get_order_dates_between, get_criteria_date
-from properties import START_DATE_ORDER, END_DATE_ORDER, FINAL_PREDICTION_LOCATION
+from properties import START_DATE_ORDER, END_DATE_ORDER, FINAL_PREDICTION_LOCATION, CUSTOMER_LIST
 
 appName = "_".join(["CSO_TESTING_", get_current_date()])
 conf = SparkConf() \
@@ -22,7 +22,6 @@ sc.setLogLevel("ERROR")
 
 print "Add cso.zip to system path"
 import sys
-
 sys.path.insert(0, "cso.zip")
 
 # import time
@@ -46,7 +45,7 @@ for order_date in ORDER_DATES:
     (
     select a.KUNNR kunnr, a.del_date del_date
     from vl_sql a
-    where a.KUNNR in ('0500066337','0500070166','0500070167','0500075749','0500083147','0500061438','0500067084','0500058324','0500080723','0500060033','0500068825','0500060917','0500078551','0500076115','0500071747','0500078478','0500078038','0500073982','0500064458','0500268924','0500070702','0500070336','0500076032','0500095883','0500284889')
+    where a.KUNNR in """ + CUSTOMER_LIST + """
     ) b
     join
     (
