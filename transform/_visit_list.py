@@ -1,5 +1,5 @@
-# from pyspark.sql.types import *
-# from pyspark.sql.functions import *
+from pyspark.sql.types import *
+from pyspark.sql.functions import *
 import numpy as np
 import datetime as dt
 from properties import VISIT_LIST_LOCATION
@@ -82,6 +82,30 @@ def _get_visit_list(sc, sqlContext, order_date):
             .select(col('KUNNR'), col('EXDAT')) \
             .withColumn('order_date', from_unixtime(unix_timestamp(col('DATE_SENT'), "yyyy.MM.dd")).cast(DateType())) \
             .filter(col('order_date') == order_date)
+
+    return vl_df
+
+
+def _get_visit_list_ver_2(sc, sqlContext, order_date):
+    raw_data = sc.textFile(VISIT_LIST_LOCATION)
+    header_vl = raw_data.first()
+
+    vl = raw_data \
+        .filter(lambda x: x != header_vl) \
+        .map(lambda line: line.split(",")[:len(line.split(",")) - 1])
+
+    # print vl.take(1)
+
+    today = dt.date.today()
+
+    vl_df = \
+        sqlContext.createDataFrame(vl, schema=_schema_vl_2()) \
+            .select('cdAccount', 'dtPlannedStart') \
+            .withColumn('customernumber',
+                        udf(lambda input: '0' + input.replace('"', ''), StringType())(col('cdAccount'))) \
+            .withColumn('order_date', my_parser(col('dtPlannedStart'))) \
+            .drop(col('cdAccount')) \
+            .drop(col('dtPlannedStart'))
 
     return vl_df
 
