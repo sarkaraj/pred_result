@@ -5,6 +5,18 @@ import datetime as dt
 from properties import VISIT_LIST_LOCATION
 
 
+def custom_parser(input):
+    from datetime import datetime
+    # input = input.replace('"', '')
+
+    datetime_object = datetime.strptime(input, '\"%m/%d/%Y %I:%M:%S %p\"').strftime('%Y-%m-%d')
+
+    return datetime_object
+
+
+my_parser = udf(custom_parser, StringType())
+
+
 def _schema_vl():
     MANDT = StructField("MANDT", StringType(), nullable=True)
     VPTYP = StructField("VPTYP", StringType(), nullable=True)
@@ -32,6 +44,27 @@ def _schema_vl():
         [MANDT, VPTYP, EXDAT, KUNNR, FROMTIME, TOTIME, USERID, VKORG, VTWEG, SPARTE, AUTH, VLID, VLPOS, SEQU, VPID,
          DATE_SENT, TIME_SENT, DELETE_FLAG, VCTEXT, STIME, STIMEZONE])
     return schema
+
+
+def _schema_vl_2():
+    # cdVisitInstance,cdClassification,Login,cdOrgUnit,nmDisplay,cdAccount,dsName,dtPlannedStart,dtPlannedEnd,dtLastModified,
+    cdVisitInstance = StructField("cdVisitInstance", StringType(), nullable=True)
+    cdClassification = StructField("cdClassification", StringType(), nullable=True)
+    Login = StructField("Login", StringType(), nullable=True)
+    cdOrgUnit = StructField("cdOrgUnit", StringType(), nullable=True)
+    nmDisplay = StructField("nmDisplay", StringType(), nullable=True)
+    cdAccount = StructField("cdAccount", StringType(), nullable=True)
+    dsName = StructField("dsName", StringType(), nullable=True)
+    dtPlannedStart = StructField("dtPlannedStart", StringType(), nullable=True)
+    dtPlannedEnd = StructField("dtPlannedEnd", StringType(), nullable=True)
+    dtLastModified = StructField("dtLastModified", StringType(), nullable=True)
+
+    schema = StructType(
+        [cdVisitInstance, cdClassification, Login, cdOrgUnit, nmDisplay, cdAccount, dsName, dtPlannedStart,
+         dtPlannedEnd, dtLastModified])
+    return schema
+
+
 
 
 def _get_visit_list(sc, sqlContext, order_date):

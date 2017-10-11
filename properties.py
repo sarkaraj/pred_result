@@ -1,7 +1,8 @@
 START_DATE_ORDER = '2017-09-14'  # # Date is INCLUSIVE
 END_DATE_ORDER = '2017-09-19'  # # Date is EXCLUSIVE
 
-VISIT_LIST_LOCATION = "wasb://skuopt@conapocv2standardsa.blob.core.windows.net/AZ_TCAS_VL.csv"
+# VISIT_LIST_LOCATION = "wasb://skuopt@conapocv2standardsa.blob.core.windows.net/AZ_TCAS_VL.csv"
+VISIT_LIST_LOCATION = "wasb://skuopt@conapocv2standardsa.blob.core.windows.net/cona.dsouth_Results_811_20171009142501.csv"
 AGLU_LIST_LOCATION = "wasb://skuopt@conapocv2standardsa.blob.core.windows.net/AZ_TCAS_AGLU.csv"
 
 FINAL_PREDICTION_LOCATION = "/CONA_CSO/final_predicted"
