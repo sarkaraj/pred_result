@@ -1,5 +1,5 @@
-# from pyspark.sql.types import *
-# from pyspark.sql.functions import *
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
 import numpy as np
 import datetime as dt
 from properties import VISIT_LIST_LOCATION
@@ -14,7 +14,7 @@ def custom_parser(input):
     return datetime_object
 
 
-my_parser = udf(custom_parser, StringType())
+# my_parser = udf(custom_parser, StringType())
 
 
 def _schema_vl():
@@ -65,26 +65,76 @@ def _schema_vl_2():
     return schema
 
 
+def _get_visit_list(sc, sqlContext, order_date, **kwargs):
+    if 'visit_list' in kwargs.keys():
+        vl = kwargs.get('visit_list')
+    else:
+        raw_data = sc.textFile(VISIT_LIST_LOCATION)
+        header_vl = raw_data.first()
 
+        vl_temp = raw_data \
+            .filter(lambda x: x != header_vl) \
+            .map(lambda line: line.split(","))
 
-def _get_visit_list(sc, sqlContext, order_date):
-    raw_data = sc.textFile(VISIT_LIST_LOCATION)
-    header_vl = raw_data.first()
+        vl = sqlContext.createDataFrame(vl_temp, schema=_schema_vl()) \
+            .withColumn('order_date',
+                        from_unixtime(unix_timestamp(col('DATE_SENT'), "yyyy.MM.dd")).cast(DateType()).alias(
+                            'order_date')) \
+            .select(col('KUNNR').alias('customernumber'), col('order_date'))
 
-    vl = raw_data \
-        .filter(lambda x: x != header_vl) \
-        .map(lambda line: line.split(","))
-
-    today = dt.date.today()
-
-    vl_df = \
-        sqlContext.createDataFrame(vl, schema=_schema_vl()) \
-            .select(col('KUNNR'), col('EXDAT')) \
-            .withColumn('order_date', from_unixtime(unix_timestamp(col('DATE_SENT'), "yyyy.MM.dd")).cast(DateType())) \
-            .filter(col('order_date') == order_date)
+    vl_df = vl \
+        .filter(col('order_date') == order_date)
 
     return vl_df
 
+
+# # NOT USED TILL NOW -- MOST LIKELY TO BE DELETED
+def _get_generated_visit_list(sc, sqlContext):
+    invoice_q = """
+    select d.customernumber customernumber, d.matnr matnr, d.bill_date bill_date, IF(d.units != 'CS', d.quantity * (f.umrez / f.umren), d.quantity) quantity, d.dlvry_lag dlvry_lag
+    from
+    (
+    select b.customernumber customernumber, b.matnr matnr, b.bill_date bill_date ,b.quantity quantity, b.units units, b.price price, c.dlvry_lag dlvry_lag
+    from
+    (
+    select a.kunag customernumber, a.matnr matnr, a.fkdat bill_date ,a.fklmg quantity, a.meins units, a.netwr price
+    from skuopt.invoices a
+    where a.kunag in ('0500083147','0500061438','0500067084','0500058324','0500080723','0500060033','0500068825','0500060917','0500078551','0500076115','0500071747','0500078478','0500078038','0500073982','0500064458','0500268924','0500070702','0500070336','0500076032','0500095883','0500284889')
+    ) b
+    join
+    (
+    select kunnr customernumber, IF(vsbed == '01', 2, 1) dlvry_lag
+    from mdm.customer
+    where vkbur='C005'
+    ) c
+    on
+    b.customernumber = c.customernumber
+    ) d
+    join
+    (
+    select e.matnr matnr, e.meinh meinh, e.umren umren, e.umrez umrez
+    from mdm.dim_marm e
+    ) f
+    on
+    d.matnr=f.matnr and d.units=f.meinh
+    where d.bill_date >= '20170903' and d.bill_date <= '20171007'
+    """
+
+    invoice_raw = sqlContext.sql(invoice_q)
+    invoice_raw.cache()
+
+    data_set = invoice_raw \
+        .filter(col('quantity') > 0) \
+        .withColumn('b_date', from_unixtime(unix_timestamp(col('bill_date'), "yyyyMMdd")).cast(DateType())) \
+        .withColumn('dlvry_date', udf((lambda x: x.strftime('%Y-%m-%d')), StringType())(col('b_date'))) \
+        .withColumn('bus_day_flag',
+                    udf((lambda x: str(np.is_busday([x])[0])), StringType())(col('dlvry_date')).cast(BooleanType())) \
+        .withColumn('visit_date',
+                    udf((lambda x, y: str(np.busday_offset(x, -y, roll='backward'))), StringType())(col('dlvry_date'),
+                                                                                                    col('dlvry_lag'))) \
+        .select(col('customernumber'), col('visit_date')) \
+        .distinct()
+    return None
 
 if __name__ == "__main__":
     import numpy as np
