@@ -1,13 +1,12 @@
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import HiveContext
-from pyspark.sql.types import *
 from pyspark.sql.functions import *
-from transform._visit_list import _get_visit_list
-from transform._aglu_list import _get_aglu_list
-from transform._invoice_latest import _get_invoice_data
-from transform._prediction_list import _get_prediction_list
-from support_func import get_current_date, get_order_dates_between, get_criteria_date, udf_get_delivery_date_from_order_date, udf_linear_scale
-from properties import START_DATE_ORDER, END_DATE_ORDER, FINAL_PREDICTION_LOCATION, CUSTOMER_LIST
+from support_func import _generate_invoice
+from transform.support_func import _get_visit_list_from_invoice
+from support_func import \
+    get_current_date  # , get_order_dates_between #, get_criteria_date, udf_get_delivery_date_from_order_date, udf_linear_scale
+from properties import START_DATE_INVOICE, END_DATE_INVOICE
+
 
 appName = "_".join(["CSO_TESTING_", get_current_date()])
 conf = SparkConf() \
@@ -22,90 +21,13 @@ sc.setLogLevel("ERROR")
 
 print "Add cso.zip to system path"
 import sys
+
 sys.path.insert(0, "cso.zip")
 
+_visit_list = _get_visit_list_from_invoice(sqlContext=sqlContext, start_date=START_DATE_INVOICE,
+                                           end_date=END_DATE_INVOICE)
+_visit_list.show()
 
+_generate_invoice(sc=sc, sqlContext=sqlContext, visit_list=_visit_list)
 
-# import time
-# start_time = time.time()
-
-ORDER_DATES = get_order_dates_between(start_date=START_DATE_ORDER, end_date=END_DATE_ORDER)
-
-for order_date in ORDER_DATES:
-    vl_df = _get_visit_list(sc=sc, sqlContext=sqlContext, order_date=order_date)
-    aglu_df = _get_aglu_list(sc=sc, sqlContext=sqlContext)
-
-    vl_df.select('KUNNR', 'order_date').registerTempTable("vl_sql")
-    aglu_df.registerTempTable("aglu_sql")
-
-    q = """
-    select e.*, f.matnr matnr
-    from
-    (
-    select b.kunnr customernumber, b.order_date order_date, d.scl_auth_matlst scl_auth_matlst, d.vkbur vkbur, IF(d.vsbed == '01', 2, 1) dlvry_lag
-    from
-    (
-    select a.KUNNR kunnr, a.order_date order_date
-    from vl_sql a
-    where a.KUNNR in """ + CUSTOMER_LIST + """
-    ) b
-    join
-    (
-    select c.kunnr kunnr, c.scl_auth_matlst scl_auth_matlst, c.vkbur vkbur, c.vsbed vsbed
-    from mdm.customer c
-    ) d
-    on d.kunnr = b.kunnr
-    ) e
-    cross join
-    (
-    select g.MATNR matnr, g.SCL_AUTH_MATLST scl_auth_matlst
-    from aglu_sql g
-    ) f
-    where e.scl_auth_matlst = f.scl_auth_matlst
-    """
-
-
-    # # Obtaining delivery_date from given order_date provided the delivery_lag
-    visit_list_final = sqlContext.sql(q)\
-        .withColumn('del_date', udf_get_delivery_date_from_order_date(col('order_date'), col('dlvry_lag')))\
-        .drop(col('dlvry_lag'))
-
-    invoice_raw = _get_invoice_data(sqlContext=sqlContext, CRITERIA_DATE=get_criteria_date(order_date=order_date)) #TODO Check viability
-
-    visit_invoice_condition = [visit_list_final.customernumber == invoice_raw.customernumber,
-                               visit_list_final.matnr == invoice_raw.matnr]
-
-    visit_list_final_join_invoice_raw = visit_list_final \
-        .join(invoice_raw, on=visit_invoice_condition, how='inner') \
-        .select(visit_list_final.customernumber,
-                visit_list_final.matnr,
-                visit_list_final.order_date,
-                visit_list_final.scl_auth_matlst,
-                visit_list_final.vkbur,
-                visit_list_final.del_date,
-                invoice_raw.bill_date)
-
-    prediction_data = _get_prediction_list(sc=sc, sqlContext=sqlContext)
-
-    visit_pred_condition = [visit_list_final_join_invoice_raw.customernumber == prediction_data.customernumber,
-                            visit_list_final_join_invoice_raw.matnr == prediction_data.matnr]
-
-    final_df = visit_list_final_join_invoice_raw \
-        .join(prediction_data, on=visit_pred_condition, how='inner') \
-        .drop(prediction_data.customernumber) \
-        .drop(prediction_data.matnr) \
-        .withColumn('last_del_date', from_unixtime(unix_timestamp(col('bill_date'), "yyyyMMdd")).cast(DateType())) \
-        .drop(col('bill_date')) \
-        .withColumn('_diff_day', datediff(col('del_date'), col('last_del_date'))) \
-        .withColumn('quantity', udf_linear_scale(col('pdt_cat'), col('pred_val'), col('_diff_day'))) \
-        .filter(col('quantity') > 0) \
-        .repartition(10)
-
-    final_df.coalesce(1) \
-        .write.mode('append') \
-        .format('orc') \
-        .option("header", "false") \
-        .save(FINAL_PREDICTION_LOCATION)
-
-
-# print("Time taken for execution:\t\t--- %s seconds ---" % (time.time() - start_time))
+sc.stop()
