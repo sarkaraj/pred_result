@@ -51,7 +51,7 @@ def _generate_invoice_query_btwn_dt(start_date, end_date, **kwargs):
     return _result
 
 
-def _get_dlvry_dt_frm_b_date(x):
+def _get_dt_frm_b_date(x):
     return x.strftime('%Y-%m-%d')
 
 
@@ -80,7 +80,7 @@ def _get_visit_list_from_invoice(sqlContext, start_date, end_date, **kwargs):
     _visit_list = sqlContext.sql(_q) \
         .filter(col('quantity') > 0) \
         .withColumn('b_date', from_unixtime(unix_timestamp(col('bill_date'), "yyyyMMdd")).cast(DateType())) \
-        .withColumn('dlvry_date', udf(_get_dlvry_dt_frm_b_date, StringType())(col('b_date'))) \
+        .withColumn('dlvry_date', udf(_get_dt_frm_b_date, StringType())(col('b_date'))) \
         .withColumn('bus_day_flag', udf(_get_bus_day_flag, StringType())(col('dlvry_date')).cast(BooleanType())) \
         .withColumn('order_date',
                     udf(_get_visit_date, StringType())(col('dlvry_date'), col('dlvry_lag')).cast(DateType())) \

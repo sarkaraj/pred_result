@@ -1,21 +1,47 @@
+from properties import CUSTOMER_LIST
+from support_func import _get_dt_frm_b_date
+
 def _get_invoice_data(sqlContext, **kwargs):
+    '''
+    Gets latest invoice data for all customers
+    :param sqlContext: SQLContext
+    :param kwargs: Used for 'CRITERIA_DATE' -->
+    :return:
+    '''
+    from pyspark.sql.functions import *
+    from pyspark.sql.types import *
+
     CRITERIA_DATE = kwargs.get('CRITERIA_DATE')
     q_2 = """
-    select a.kunag customernumber, a.matnr matnr, max(a.fkdat) bill_date
+    select a.kunag customernumber, a.matnr mat_no, max(a.fkdat) bill_date
     from skuopt.invoices a
-    where a.kunag in ('0500066337','0500070166','0500070167','0500075749','0500083147','0500061438','0500067084','0500058324','0500080723','0500060033','0500068825','0500060917','0500078551','0500076115','0500071747','0500078478','0500078038','0500073982','0500064458','0500268924','0500070702','0500070336','0500076032','0500095883','0500284889')
-    and a.fkdat < """ + CRITERIA_DATE + """ group by a.kunag,a.matnr"""
+    where a.kunag in"""
+    cust_list = CUSTOMER_LIST
 
-    _invoice_raw_data = sqlContext.sql(q_2)
+    _condition = """and a.fkdat <= """ + CRITERIA_DATE + """ group by a.kunag,a.matnr"""
+
+    _query = " ".join([q_2, cust_list, _condition])
+
+    _invoice_raw_data = sqlContext.sql(_query) \
+        .withColumn('b_date', from_unixtime(unix_timestamp(col('bill_date'), "yyyyMMdd")).cast(DateType())) \
+        .withColumn('last_delivery_date', udf(_get_dt_frm_b_date, StringType())(col('b_date'))) \
+        .drop(col('b_date')) \
+        .drop(col('bill_date'))
 
     return _invoice_raw_data
 
 
 if __name__ == "__main__":
-    q_2 = """
-        select a.kunag customernumber, a.matnr matnr, max(a.fkdat) bill_date
-        from skuopt.invoices a
-        where a.kunag in ('0500066337','0500070166','0500070167','0500075749','0500083147','0500061438','0500067084','0500058324','0500080723','0500060033','0500068825','0500060917','0500078551','0500076115','0500071747','0500078478','0500078038','0500073982','0500064458','0500268924','0500070702','0500070336','0500076032','0500095883','0500284889')
-        and a.fkdat < """ + CRITERIA_DATE + """ group by a.kunag,a.matnr"""
+    # _get_invoice_data()
 
-    print q_2
+    q_2 = """
+        select a.kunag customernumber, a.matnr matnr, max(a.fkdat) last_delivery_date
+        from skuopt.invoices a
+        where a.kunag in"""
+    cust_list = CUSTOMER_LIST
+
+    _condition = """and a.fkdat <= """ + "blah" + """ group by a.kunag,a.matnr"""
+
+    _query = " ".join([q_2, cust_list, _condition])
+
+    print _query

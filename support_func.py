@@ -1,6 +1,7 @@
 from properties import pdt_cat_denominator
 from transform._visit_list import _get_visit_list
 from transform._aglu_list import _get_aglu_list
+import numpy as np
 from properties import START_DATE_ORDER, END_DATE_ORDER
 
 
@@ -28,7 +29,9 @@ def get_criteria_date(order_date, **kwargs):
     import numpy as np
     import pandas as pd
 
-    a = np.busday_offset(order_date, 2, roll='forward')
+    # # TODO Needs clarification about what logic to put
+    # a = np.busday_offset(order_date, 2, roll='forward')
+    a = order_date # # as of now this is a redundant line
     t = pd.to_datetime(str(a))
     b = t.strftime('\'%Y%m%d\'')
     return b
@@ -49,9 +52,18 @@ def linear_scale(pdt_cat, pred_val, _diff_day):
     return _result
 
 
+def _get_delivery_date(date, lag):
+    _date = str(date)
+    _lag = int(lag)
+    return str(np.busday_offset(_date, _lag, roll='forward'))
+
+
 def _generate_invoice(sc, sqlContext, **kwargs):
     from pyspark.sql.functions import *
     from pyspark.sql.types import *
+    from transform._invoice_latest import _get_invoice_data
+    from transform._prediction_list import _get_prediction_list
+
 
     _visit_list = kwargs.get('visit_list')
 
@@ -100,33 +112,42 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     # # Obtaining delivery_date from given order_date provided the delivery_lag
     # TODO Start from this point
     visit_list_final = sqlContext.sql(q) \
-        .withColumn('del_date', udf_get_delivery_date_from_order_date(col('order_date'), col('dlvry_lag'))) \
+        .drop(col('scl_auth_matlst')) \
+        .withColumn('delivery_date', udf(_get_delivery_date, StringType())(col('order_date'), col('dlvry_lag'))) \
         .drop(col('dlvry_lag'))
 
     visit_list_final.show()
+    # visit_list_final.printSchema()
 
-    #     invoice_raw = _get_invoice_data(sqlContext=sqlContext, CRITERIA_DATE=get_criteria_date(order_date=order_date)) #TODO Check viability
-    #
-    #     visit_invoice_condition = [visit_list_final.customernumber == invoice_raw.customernumber,
-    #                                visit_list_final.matnr == invoice_raw.matnr]
-    #
-    #     visit_list_final_join_invoice_raw = visit_list_final \
-    #         .join(invoice_raw, on=visit_invoice_condition, how='inner') \
-    #         .select(visit_list_final.customernumber,
-    #                 visit_list_final.matnr,
-    #                 visit_list_final.order_date,
-    #                 visit_list_final.scl_auth_matlst,
-    #                 visit_list_final.vkbur,
-    #                 visit_list_final.del_date,
-    #                 invoice_raw.bill_date)
-    #
-    #     prediction_data = _get_prediction_list(sc=sc, sqlContext=sqlContext)
-    #
-    #     visit_pred_condition = [visit_list_final_join_invoice_raw.customernumber == prediction_data.customernumber,
-    #                             visit_list_final_join_invoice_raw.matnr == prediction_data.matnr]
-    #
-    #     final_df = visit_list_final_join_invoice_raw \
-    #         .join(prediction_data, on=visit_pred_condition, how='inner') \
+    invoice_raw = _get_invoice_data(sqlContext=sqlContext, CRITERIA_DATE=get_criteria_date(order_date=order_date)) #TODO Check viability
+
+    invoice_raw.show()
+
+
+    visit_invoice_condition = [visit_list_final.customernumber == invoice_raw.customernumber,
+                                   visit_list_final.mat_no == invoice_raw.mat_no]
+
+    visit_list_final_join_invoice_raw = visit_list_final \
+        .join(invoice_raw, on=visit_invoice_condition, how='inner') \
+        .select(visit_list_final.customernumber,
+                visit_list_final.mat_no,
+                visit_list_final.order_date,
+                visit_list_final.vkbur,
+                visit_list_final.delivery_date,
+                invoice_raw.last_delivery_date)
+
+    visit_list_final_join_invoice_raw.show()
+    # print visit_list_final_join_invoice_raw.count()
+
+    prediction_data = _get_prediction_list(sc=sc, sqlContext=sqlContext, CRITERIA_DATE=order_date)
+
+
+    visit_pred_condition = [visit_list_final_join_invoice_raw.customernumber == prediction_data.customernumber,
+                            visit_list_final_join_invoice_raw.mat_no == prediction_data.mat_no]
+
+
+    final_df = visit_list_final_join_invoice_raw \
+        .join(prediction_data, on=visit_pred_condition, how='inner')
     #         .drop(prediction_data.customernumber) \
     #         .drop(prediction_data.matnr) \
     #         .withColumn('last_del_date', from_unixtime(unix_timestamp(col('bill_date'), "yyyyMMdd")).cast(DateType())) \
@@ -135,6 +156,8 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     #         .withColumn('quantity', udf_linear_scale(col('pdt_cat'), col('pred_val'), col('_diff_day'))) \
     #         .filter(col('quantity') > 0) \
     #         .repartition(10)
+
+    final_df.show()
     #
     #     final_df.coalesce(1) \
     #         .write.mode('append') \
