@@ -84,7 +84,7 @@ def _get_visit_list_from_invoice(sqlContext, start_date, end_date, **kwargs):
         .withColumn('bus_day_flag', udf(_get_bus_day_flag, StringType())(col('dlvry_date')).cast(BooleanType())) \
         .withColumn('order_date',
                     udf(_get_visit_date, StringType())(col('dlvry_date'), col('dlvry_lag')).cast(DateType())) \
-        .select(col('customernumber'), col('order_date')) \
+        .select(col('customernumber'), col('matnr').alias('mat_no'), col('order_date')) \
         .distinct()
 
     return _visit_list

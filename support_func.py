@@ -68,30 +68,50 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     _visit_list = kwargs.get('visit_list')
 
     ORDER_DATES = get_order_dates_between(start_date=START_DATE_ORDER, end_date=END_DATE_ORDER)
-    order_date = ORDER_DATES[0]
+    order_date = ORDER_DATES[1]
     vl_df = _get_visit_list(sc=sc, sqlContext=sqlContext, order_date=order_date,
                             visit_list=_visit_list)  # # Gets the visit list for a given order date
-    aglu_df = _get_aglu_list(sc=sc, sqlContext=sqlContext)
+    # aglu_df = _get_aglu_list(sc=sc, sqlContext=sqlContext)
 
     # vl_df.show(10)
     # aglu_df.show(10)
 
-    # for order_date in ORDER_DATES:
-    vl_df = _get_visit_list(sc=sc, sqlContext=sqlContext, order_date=order_date,
-                            visit_list=_visit_list)  # # Gets the visit list for a given order date
-    aglu_df = _get_aglu_list(sc=sc, sqlContext=sqlContext)
-
     vl_df.registerTempTable("vl_sql")
-    aglu_df.select(col('MATNR').alias('mat_no'), col('scl_auth_matlst')).registerTempTable("aglu_sql")
+    # aglu_df.select(col('MATNR').alias('mat_no'), col('scl_auth_matlst')).registerTempTable("aglu_sql")
+
+    # q = """
+    # select e.*, f.mat_no mat_no
+    # from
+    # (
+    # select b.customernumber customernumber, b.order_date order_date, d.scl_auth_matlst scl_auth_matlst, d.vkbur vkbur, IF(d.vsbed == '01', 2, 1) dlvry_lag
+    # from
+    # (
+    # select a.customernumber customernumber, a.order_date order_date
+    # from vl_sql a
+    # ) b
+    # join
+    # (
+    # select c.kunnr customernumber, c.scl_auth_matlst scl_auth_matlst, c.vkbur vkbur, c.vsbed vsbed
+    # from mdm.customer c
+    # ) d
+    # on d.customernumber = b.customernumber
+    # ) e
+    # cross join
+    # (
+    # select g.mat_no mat_no, g.SCL_AUTH_MATLST scl_auth_matlst
+    # from aglu_sql g
+    # ) f
+    # where e.scl_auth_matlst = f.scl_auth_matlst
+    # """
 
     q = """
-    select e.*, f.mat_no mat_no
+    select e.*
     from
     (
-    select b.customernumber customernumber, b.order_date order_date, d.scl_auth_matlst scl_auth_matlst, d.vkbur vkbur, IF(d.vsbed == '01', 2, 1) dlvry_lag
+    select b.customernumber customernumber, b.mat_no mat_no, b.order_date order_date, d.scl_auth_matlst scl_auth_matlst, d.vkbur vkbur, IF(d.vsbed == '01', 2, 1) dlvry_lag
     from
     (
-    select a.customernumber customernumber, a.order_date order_date
+    select a.customernumber customernumber, a.mat_no mat_no, a.order_date order_date
     from vl_sql a
     ) b
     join
@@ -101,26 +121,21 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     ) d
     on d.customernumber = b.customernumber
     ) e
-    cross join
-    (
-    select g.mat_no mat_no, g.SCL_AUTH_MATLST scl_auth_matlst
-    from aglu_sql g
-    ) f
-    where e.scl_auth_matlst = f.scl_auth_matlst
     """
 
     # # Obtaining delivery_date from given order_date provided the delivery_lag
-    # TODO Start from this point
     visit_list_final = sqlContext.sql(q) \
         .drop(col('scl_auth_matlst')) \
         .withColumn('delivery_date', udf(_get_delivery_date, StringType())(col('order_date'), col('dlvry_lag'))) \
         .drop(col('dlvry_lag'))
 
+    print("Visit List Final")
     visit_list_final.show()
     # visit_list_final.printSchema()
 
     invoice_raw = _get_invoice_data(sqlContext=sqlContext, CRITERIA_DATE=get_criteria_date(order_date=order_date)) #TODO Check viability
 
+    print("Invoice_raw")
     invoice_raw.show()
 
 
@@ -136,8 +151,9 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 visit_list_final.delivery_date,
                 invoice_raw.last_delivery_date)
 
+    print("Visit list final join invoice raw")
     visit_list_final_join_invoice_raw.show()
-    # print visit_list_final_join_invoice_raw.count()
+    print visit_list_final_join_invoice_raw.count()
 
     prediction_data = _get_prediction_list(sc=sc, sqlContext=sqlContext, CRITERIA_DATE=order_date)
 
@@ -145,7 +161,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     visit_pred_condition = [visit_list_final_join_invoice_raw.customernumber == prediction_data.customernumber,
                             visit_list_final_join_invoice_raw.mat_no == prediction_data.mat_no]
 
-
+    # TODO Start from this point
     final_df = visit_list_final_join_invoice_raw \
         .join(prediction_data, on=visit_pred_condition, how='inner')
     #         .drop(prediction_data.customernumber) \
@@ -157,6 +173,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     #         .filter(col('quantity') > 0) \
     #         .repartition(10)
 
+    print("Final_df")
     final_df.show()
     #
     #     final_df.coalesce(1) \

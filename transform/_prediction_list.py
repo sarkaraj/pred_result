@@ -27,7 +27,7 @@ if __name__ == "__main__":
         (
         select customernumber, mat_no, MAX(mdl_bld_dt) latest_mdl_bld_dt 
         from predicted_order.final_table
-        where mdl_bld_dt < """ + "\'" + '2017-09-15' + "\'" + """
+        where mdl_bld_dt < """ + "\'" + '2017-09-14' + "\'" + """
         group by customernumber, mat_no
         ) a
         join
