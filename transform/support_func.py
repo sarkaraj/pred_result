@@ -1,5 +1,7 @@
 from properties import invoice_q
 import numpy as np
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
 
 
 def string_to_gregorian(dt_str, sep='-', **kwargs):
@@ -72,8 +74,6 @@ def _get_visit_list_from_invoice(sqlContext, start_date, end_date, **kwargs):
     :param kwargs: None as of 18-10-2017
     :return: Spark Dataframe of visit list between start_date and end_date of unique customers
     '''
-    from pyspark.sql.functions import *
-    from pyspark.sql.types import *
 
     _q = _generate_invoice_query_btwn_dt(start_date=start_date, end_date=end_date)
 

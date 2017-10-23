@@ -1,5 +1,7 @@
 from properties import CUSTOMER_LIST
 from support_func import _get_dt_frm_b_date
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
 
 def _get_invoice_data(sqlContext, **kwargs):
     '''
@@ -8,8 +10,6 @@ def _get_invoice_data(sqlContext, **kwargs):
     :param kwargs: Used for 'CRITERIA_DATE' -->
     :return:
     '''
-    from pyspark.sql.functions import *
-    from pyspark.sql.types import *
 
     CRITERIA_DATE = kwargs.get('CRITERIA_DATE')
     q_2 = """

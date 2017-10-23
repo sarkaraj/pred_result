@@ -26,7 +26,7 @@ sys.path.insert(0, "cso.zip")
 
 _visit_list = _get_visit_list_from_invoice(sqlContext=sqlContext, start_date=START_DATE_INVOICE,
                                            end_date=END_DATE_INVOICE)
-_visit_list.show()
+# _visit_list.show()
 
 _generate_invoice(sc=sc, sqlContext=sqlContext, visit_list=_visit_list)
 
