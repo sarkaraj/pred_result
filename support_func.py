@@ -241,7 +241,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     from transform._prediction_list import _get_models_list, _get_prediction_list
 
     _visit_list = kwargs.get('visit_list')
-    windowSpec = kwargs.get('window')
+    cust_pdt_mdl_bld_dt_window = kwargs.get('window')
 
     ORDER_DATES = get_order_dates_between(start_date=START_DATE_ORDER, end_date=END_DATE_ORDER)
     order_date = ORDER_DATES[1]
@@ -362,7 +362,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     from pyspark.sql.window import Window
     import sys
 
-    windowSpec = Window \
+    cust_pdt_mdl_bld_dt_window = Window \
         .partitionBy(_final_df_stage.customernumber, _final_df_stage.mat_no) \
         .orderBy(_final_df_stage.mdl_bld_dt) \
         .rangeBetween(-sys.maxsize, sys.maxsize)
@@ -378,7 +378,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 col('mdl_bld_dt'),
                 (max(udf(_get_max_date_spprt_func_1, DateType())(col('mdl_bld_dt'),
                                                                  col('mod_last_delivery_date')))).over(
-                    window=windowSpec).cast(StringType()).alias('min_mdl_bld_dt')
+                    window=cust_pdt_mdl_bld_dt_window).cast(StringType()).alias('min_mdl_bld_dt')
                 ) \
         .withColumn('mdl_validity',
                     udf(_is_model_valid, BooleanType())(col('delivery_date'), col('mod_last_delivery_date'),
@@ -416,7 +416,12 @@ def _generate_invoice(sc, sqlContext, **kwargs):
 
     print _temp_df_rdd_mapped.take(1)
 
-    # # TODO Choose the most latest model -- thats the only thing left
+    cust_pdt_week_month_window = Window \
+        .partitionBy(_final_df_stage.customernumber, _final_df_stage.mat_no) \
+        .orderBy(_final_df_stage.mdl_bld_dt) \
+        .rangeBetween(-sys.maxsize, sys.maxsize)
+
+    # # TODO Choose the most latest model -- sanity check
     _temp_df_flat = sqlContext.createDataFrame(_temp_df_rdd_mapped, schema=_pred_val_to_week_month_year_schema()) \
         .select(col('customernumber'),
                 col('mat_no'),
@@ -426,10 +431,16 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 col('delivery_date'),
                 col('mod_last_delivery_date').alias('last_delivery_date'),
                 col('mdl_bld_dt'),
-                col('scale_denom')) \
+                col('scale_denom'),
+                (max(udf(string_to_gregorian, DateType())(col('mdl_bld_dt')))).over(
+                    window=Window.partitionBy("customernumber", "mat_no", "week_month_key").orderBy("mdl_bld_dt")).cast(
+                    StringType()).alias('updt_mdl_bld_dt')
+                ) \
+        .filter(col('mdl_bld_dt') == col('updt_mdl_bld_dt')) \
         .withColumn('_partial_diff', udf(_get_partial_date_diff, IntegerType())(col('week_month_key'), col('pdt_cat'),
                                                                                 col('delivery_date'),
-                                                                                col('last_delivery_date')))
+                                                                                col('last_delivery_date'))) \
+        .drop(col('mdl_bld_dt'))
     # .filter((col('customernumber') == '0500083147') & (col('mat_no') == '000000000000144484'))\
     # .withColumn('_partial_diff', udf(_get_partial_date_diff, IntegerType())(col('week_month_key'), col('pdt_cat'), col('delivery_date'), col('last_delivery_date')))
 
