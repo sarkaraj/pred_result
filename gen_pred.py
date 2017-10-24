@@ -1,11 +1,11 @@
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import HiveContext
 from pyspark.sql.functions import *
-from support_func import _generate_invoice
+from support_func import _generate_invoice, get_order_dates_between
 from transform.support_func import _get_visit_list_from_invoice
 from support_func import \
     get_current_date  # , get_order_dates_between #, get_criteria_date, udf_get_delivery_date_from_order_date, udf_linear_scale
-from properties import START_DATE_INVOICE, END_DATE_INVOICE
+from properties import *
 
 
 appName = "_".join(["CSO_TESTING_", get_current_date()])
@@ -27,7 +27,14 @@ sys.path.insert(0, "cso.zip")
 _visit_list = _get_visit_list_from_invoice(sqlContext=sqlContext, start_date=START_DATE_INVOICE,
                                            end_date=END_DATE_INVOICE)
 # _visit_list.show()
+_visit_list.cache()
 
-_generate_invoice(sc=sc, sqlContext=sqlContext, visit_list=_visit_list)
+ORDER_DATES = get_order_dates_between(start_date=START_DATE_ORDER, end_date=END_DATE_ORDER)
+# order_date = ORDER_DATES[1]
+
+for order_date in ORDER_DATES:
+    print ("Generating Invoice for " + order_date)
+    _generate_invoice(sc=sc, sqlContext=sqlContext, visit_list=_visit_list, order_date=order_date)
+    print ("#######################################################")
 
 sc.stop()
