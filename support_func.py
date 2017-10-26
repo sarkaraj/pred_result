@@ -243,25 +243,29 @@ def _calculate_quantity(pred_val, scale_denom, partial_diff):
     return _result
 
 def _generate_invoice(sc, sqlContext, **kwargs):
-    # from pyspark.sql.functions import *
-    # from pyspark.sql.types import *
     from transform._invoice_latest import _get_invoice_data
     from transform._prediction_list import _get_models_list, _get_prediction_list
-    from properties import FINAL_PREDICTION_LOCATION, _PREDICTION_LOCATION
+    from properties import FINAL_PREDICTION_LOCATION, _PREDICTION_LOCATION, TESTING
     from transform._remainder_addition import _get_remainder
 
+    # Get visit list as an argument
     _visit_list = kwargs.get('visit_list')
-    # cust_pdt_mdl_bld_dt_window = kwargs.get('window')
+
+    # Get order date as an argument -- Used for simulation purpose now. Should be changed to current system date ideally
     order_date = kwargs.get('order_date')
 
+    # Filters out the visit list for the provided order_date
     vl_df = _get_visit_list(sc=sc, sqlContext=sqlContext, order_date=order_date,
                             visit_list=_visit_list)  # # Gets the visit list for a given order date
+
+    # # Used to the authorised material list for a particular 'vkbur'
     # aglu_df = _get_aglu_list(sc=sc, sqlContext=sqlContext)
 
-    # vl_df.show(10)
-    # aglu_df.show(10)
 
     vl_df.registerTempTable("vl_sql")
+    # # query to join the visit list with authorised material list to obtain a complete set of products for all scheduled visits.
+    # # TODO: Clarify is there is any method to isolate the materials for a particular visit
+
     # aglu_df.select(col('MATNR').alias('mat_no'), col('scl_auth_matlst')).registerTempTable("aglu_sql")
 
     # q = """
@@ -289,6 +293,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     # where e.scl_auth_matlst = f.scl_auth_matlst
     # """
 
+    # Query to join the visit list to the customer master table to obtain delivery lag for a customer
     q = """
     select e.*
     from
@@ -316,9 +321,8 @@ def _generate_invoice(sc, sqlContext, **kwargs):
         .repartition(60)
 
     print("Visit List Final")
-    # visit_list_final.show()
-    # visit_list_final.printSchema()
 
+    #
     invoice_raw = _get_invoice_data(sqlContext=sqlContext,
                                     CRITERIA_DATE=get_criteria_date(order_date=order_date)).repartition(60)
 
@@ -347,7 +351,8 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     # print(visit_list_final_join_invoice_raw.count())
     # visit_list_final_join_invoice_raw.printSchema()
 
-    models_data_raw = _get_models_list(sc=sc, sqlContext=sqlContext, CRITERIA_DATE=order_date).repartition(60)
+    models_data_raw = _get_models_list(sc=sc, sqlContext=sqlContext, CRITERIA_DATE=order_date,
+                                       testing=TESTING).repartition(60)
     print("Prediction Data")
     # models_data_raw.show()
     # print(models_data_raw.count())
@@ -403,7 +408,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     print("Final_df")
     # _final_df.show()
 
-    _prediction_df_raw = _get_prediction_list(sqlContext=sqlContext).repartition(60)
+    _prediction_df_raw = _get_prediction_list(sqlContext=sqlContext, testing=TESTING).repartition(60)
 
     _final_df_prediction_df_raw_condition = [_final_df.customernumber == _prediction_df_raw.customernumber,
                                              _final_df.mat_no == _prediction_df_raw.mat_no,
@@ -464,7 +469,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     print("temp_df_flat")
     # _temp_df_flat.show()
 
-    _remainder_df = _get_remainder(sqlContext=sqlContext).repartition(60)
+    _remainder_df = _get_remainder(sqlContext=sqlContext, testing=TESTING).repartition(60)
 
     # _remainder_df.show()
 

@@ -6,19 +6,33 @@ def _get_models_list(sqlContext, **kwargs):
     :return: Spark Dataframe of raw prediction data
     '''
     CRITERIA_DATE = kwargs.get('CRITERIA_DATE')
+    testing = kwargs.get('testing')
 
-    q = """select customernumber, mat_no, mdl_bld_dt 
-    from predicted_order.final_table
-    where to_date(from_unixtime(unix_timestamp(mdl_bld_dt , 'yyyy-MM-dd'))) < to_date(from_unixtime(unix_timestamp(""" + "\'" + CRITERIA_DATE + "\'" + """, 'yyyy-MM-dd')))
-    """
+    if testing:
+        q = """select customernumber, mat_no, mdl_bld_dt 
+        from predicted_order.view_consolidated_pred_complete_model_eda
+        where to_date(from_unixtime(unix_timestamp(mdl_bld_dt , 'yyyy-MM-dd'))) < to_date(from_unixtime(unix_timestamp(""" + "\'" + CRITERIA_DATE + "\'" + """, 'yyyy-MM-dd')))
+        """
+    else:
+        q = """select customernumber, mat_no, mdl_bld_dt 
+        from predicted_order.final_table
+        where to_date(from_unixtime(unix_timestamp(mdl_bld_dt , 'yyyy-MM-dd'))) < to_date(from_unixtime(unix_timestamp(""" + "\'" + CRITERIA_DATE + "\'" + """, 'yyyy-MM-dd')))
+        """
+
     _model_bld_data = sqlContext.sql(q)
 
     return _model_bld_data
 
 
 def _get_prediction_list(sqlContext, **kwargs):
-    q = """select customernumber, mat_no, mdl_bld_dt, pred_val, pdt_cat
-    from predicted_order.final_table"""
+    testing = kwargs.get('testing')
+
+    if testing:
+        q = """select customernumber, mat_no, mdl_bld_dt, pred_val, pdt_cat
+        from predicted_order.view_consolidated_pred_complete_model_eda"""
+    else:
+        q = """select customernumber, mat_no, mdl_bld_dt, pred_val, pdt_cat
+        from predicted_order.final_table"""
 
     _prediction_data = sqlContext.sql(q)
     return _prediction_data

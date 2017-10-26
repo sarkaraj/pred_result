@@ -39,9 +39,11 @@ ORDER_DATES = get_order_dates_between(start_date=START_DATE_ORDER, end_date=END_
 
 # Loop through all order dates to generate invoices of each date.
 for order_date in ORDER_DATES:
+    print("************************************************************************************")
     print ("Generating Invoice for " + order_date)
+    print("************************************************************************************")
     _generate_invoice(sc=sc, sqlContext=sqlContext, visit_list=_visit_list, order_date=order_date)
-    print ("#######################################################")
+    print("************************************************************************************")
 
 # Stopping SparkContext
 sc.stop()
