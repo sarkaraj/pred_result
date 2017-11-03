@@ -8,6 +8,7 @@ SIMULATION_START_DATE = '2017-09-03'
 
 FINAL_PREDICTION_LOCATION = "/CONA_CSO/final_predicted"
 _PREDICTION_LOCATION = "/CONA_CSO/rajarshi_predicted"
+
 #
 # FINAL_PREDICTION_LOCATION = "/CONA_CSO/model_eda/final_predicted"
 # _PREDICTION_LOCATION = "/CONA_CSO/model_eda/rajarshi_predicted"
