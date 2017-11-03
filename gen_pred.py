@@ -45,5 +45,7 @@ for order_date in ORDER_DATES:
     _generate_invoice(sc=sc, sqlContext=sqlContext, visit_list=_visit_list, order_date=order_date)
     print("************************************************************************************")
 
+# Clearing Cache
+sqlContext.clearCache()
 # Stopping SparkContext
 sc.stop()
