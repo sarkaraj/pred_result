@@ -2,7 +2,7 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from properties import pdt_cat_denominator
 from transform._visit_list import _get_visit_list
-from transform._aglu_list import _get_aglu_list
+# from transform._aglu_list import _get_aglu_list
 import numpy as np
 from properties import START_DATE_ORDER, END_DATE_ORDER
 from datetime import datetime
@@ -327,7 +327,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                                     CRITERIA_DATE=get_criteria_date(order_date=order_date)).repartition(60)
 
     print("Invoice_raw")
-    # invoice_raw.show()
+    # invoice_raw.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
 
 
     visit_invoice_condition = [visit_list_final.customernumber == invoice_raw.customernumber,
@@ -347,14 +347,14 @@ def _generate_invoice(sc, sqlContext, **kwargs):
 
 
     print("Visit list final join invoice raw")
-    # visit_list_final_join_invoice_raw.show()
+    # visit_list_final_join_invoice_raw.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
     # print(visit_list_final_join_invoice_raw.count())
     # visit_list_final_join_invoice_raw.printSchema()
 
     models_data_raw = _get_models_list(sc=sc, sqlContext=sqlContext, CRITERIA_DATE=order_date,
                                        testing=TESTING).repartition(60)
     print("Prediction Data")
-    # models_data_raw.show()
+    # models_data_raw.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
     # print(models_data_raw.count())
     # models_data_raw.printSchema()
 
@@ -374,7 +374,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 ).repartition(60)
 
     print("Final_df_stage")
-    # _final_df_stage.show()
+    # _final_df_stage.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
 
     ########################################
     from pyspark.sql.window import Window
@@ -406,9 +406,12 @@ def _generate_invoice(sc, sqlContext, **kwargs):
         .repartition(60)
 
     print("Final_df")
-    # _final_df.show()
+    # _final_df.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
 
     _prediction_df_raw = _get_prediction_list(sqlContext=sqlContext, testing=TESTING).repartition(60)
+
+    print ("prediction_df_raw")
+    # _prediction_df_raw.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
 
     _final_df_prediction_df_raw_condition = [_final_df.customernumber == _prediction_df_raw.customernumber,
                                              _final_df.mat_no == _prediction_df_raw.mat_no,
@@ -429,7 +432,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
         .repartition(60)
 
     print("_temp_df")
-    # _temp_df.show()
+    # _temp_df.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
     # _temp_df.printSchema()
 
     _temp_df_rdd_mapped = _temp_df.flatMap(lambda _row: map_pred_val_to_week_month_year(_row))
@@ -453,7 +456,8 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 col('mdl_bld_dt'),
                 col('scale_denom'),
                 (max(udf(string_to_gregorian, DateType())(col('mdl_bld_dt')))).over(
-                    window=Window.partitionBy("customernumber", "mat_no", "week_month_key").orderBy("mdl_bld_dt")).cast(
+                    window=Window.partitionBy("customernumber", "mat_no", "week_month_key").orderBy(
+                        "mdl_bld_dt").rangeBetween(-sys.maxsize, sys.maxsize)).cast(
                     StringType()).alias('updt_mdl_bld_dt')
                 ) \
         .filter(col('mdl_bld_dt') == col('updt_mdl_bld_dt')) \
@@ -467,11 +471,12 @@ def _generate_invoice(sc, sqlContext, **kwargs):
         .repartition(60)
 
     print("temp_df_flat")
-    # _temp_df_flat.show()
+    # _temp_df_flat.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
 
     _remainder_df = _get_remainder(sqlContext=sqlContext, testing=TESTING).repartition(60)
 
-    # _remainder_df.show()
+    print ("remainder_df")
+    # _remainder_df.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
 
     print("result_df_stage")
     result_df_stage = _temp_df_flat \
@@ -483,7 +488,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     ) \
         .repartition(60)
 
-    # result_df_stage.cache()
+    # result_df_stage.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
 
     print("Writing raw invoice to HDFS")
     result_df_stage \
@@ -519,7 +524,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
 
     print("result_df")
     # result_df.cache()
-    # result_df.show()
+    # result_df.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
     # print(result_df.count())
 
 
@@ -531,23 +536,6 @@ def _generate_invoice(sc, sqlContext, **kwargs):
         .option("header", "false") \
         .save(FINAL_PREDICTION_LOCATION)
 
-
-
-
-    #         .drop(models_data_raw.customernumber) \
-    #         .drop(models_data_raw.matnr) \
-    #         .withColumn('last_del_date', from_unixtime(unix_timestamp(col('bill_date'), "yyyyMMdd")).cast(DateType())) \
-    #         .drop(col('bill_date')) \
-    #         .withColumn('_diff_day', datediff(col('del_date'), col('last_del_date'))) \
-    #         .withColumn('quantity', udf_linear_scale(col('pdt_cat'), col('pred_val'), col('_diff_day'))) \
-    #         .filter(col('quantity') > 0) \
-    #         .repartition(10)
-
-    #     _final_df_stage.coalesce(1) \
-    #         .write.mode('append') \
-    #         .format('orc') \
-    #         .option("header", "false") \
-    #         .save(FINAL_PREDICTION_LOCATION)
 
 
 if __name__ == "__main__":

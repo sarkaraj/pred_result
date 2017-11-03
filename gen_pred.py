@@ -34,6 +34,8 @@ _visit_list.cache()
 # Get all order dates between START_DATE_ORDER and END_DATE_ORDER
 ORDER_DATES = get_order_dates_between(start_date=START_DATE_ORDER, end_date=END_DATE_ORDER)
 
+# ORDER_DATES = ['2017-09-06', '2017-09-13']
+
 # # For testing
 # # order_date = ORDER_DATES[1]
 
