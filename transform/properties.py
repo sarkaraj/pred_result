@@ -9,7 +9,6 @@ invoice_q = """
     (
     select a.kunag customernumber, a.matnr matnr, a.fkdat bill_date ,a.fklmg quantity, a.meins units, a.netwr price
     from skuopt.invoices a
-    where a.kunag in """ + CUSTOMER_LIST + """
     ) b
     join
     (
