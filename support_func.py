@@ -245,7 +245,7 @@ def _calculate_quantity(pred_val, scale_denom, partial_diff):
 def _generate_invoice(sc, sqlContext, **kwargs):
     from transform._invoice_latest import _get_invoice_data
     from transform._prediction_list import _get_models_list, _get_prediction_list
-    from properties import FINAL_PREDICTION_LOCATION, _PREDICTION_LOCATION, TESTING
+    from properties import FINAL_PREDICTION_LOCATION, _PREDICTION_LOCATION, TESTING, REPARTITION_VAL
     from transform._remainder_addition import _get_remainder
 
     # Get visit list as an argument
@@ -315,19 +315,22 @@ def _generate_invoice(sc, sqlContext, **kwargs):
 
     # # Obtaining delivery_date from given order_date provided the delivery_lag
     visit_list_final = sqlContext.sql(q) \
+        .repartition(REPARTITION_VAL) \
         .drop(col('scl_auth_matlst')) \
         .withColumn('delivery_date', udf(_get_delivery_date, StringType())(col('order_date'), col('dlvry_lag'))) \
-        .drop(col('dlvry_lag')) \
-        .repartition(60)
+        .drop(col('dlvry_lag'))
+
 
     print("Visit List Final")
+    # visit_list_final.show()
 
     #
     invoice_raw = _get_invoice_data(sqlContext=sqlContext,
-                                    CRITERIA_DATE=get_criteria_date(order_date=order_date)).repartition(60)
+                                    CRITERIA_DATE=get_criteria_date(order_date=order_date)) \
+        .repartition(REPARTITION_VAL)
 
     print("Invoice_raw")
-    # invoice_raw.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
+    # invoice_raw.show()
 
 
     visit_invoice_condition = [visit_list_final.customernumber == invoice_raw.customernumber,
@@ -335,6 +338,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
 
     visit_list_final_join_invoice_raw = visit_list_final \
         .join(invoice_raw, on=visit_invoice_condition, how='inner') \
+        .repartition(REPARTITION_VAL) \
         .select(visit_list_final.customernumber,
                 visit_list_final.mat_no,
                 visit_list_final.order_date,
@@ -342,19 +346,20 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 visit_list_final.delivery_date,
                 invoice_raw.last_delivery_date) \
         .withColumn('mod_last_delivery_date', udf(_get_tweaked_last_del_dt, StringType())(col('last_delivery_date'))) \
-        .drop(col('last_delivery_date')) \
-        .repartition(60)
+        .drop(col('last_delivery_date'))
+
 
 
     print("Visit list final join invoice raw")
-    # visit_list_final_join_invoice_raw.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
+    # visit_list_final_join_invoice_raw.show()
     # print(visit_list_final_join_invoice_raw.count())
     # visit_list_final_join_invoice_raw.printSchema()
 
     models_data_raw = _get_models_list(sc=sc, sqlContext=sqlContext, CRITERIA_DATE=order_date,
-                                       testing=TESTING).repartition(60)
+                                       testing=TESTING) \
+        .repartition(REPARTITION_VAL)
     print("Prediction Data")
-    # models_data_raw.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
+    # models_data_raw.show()
     # print(models_data_raw.count())
     # models_data_raw.printSchema()
 
@@ -364,6 +369,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
 
     _final_df_stage = visit_list_final_join_invoice_raw \
         .join(models_data_raw, on=visit_pred_condition, how='inner') \
+        .repartition(REPARTITION_VAL) \
         .select(visit_list_final_join_invoice_raw.customernumber,
                 visit_list_final_join_invoice_raw.mat_no,
                 visit_list_final_join_invoice_raw.order_date,
@@ -371,10 +377,10 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 visit_list_final_join_invoice_raw.delivery_date,
                 visit_list_final_join_invoice_raw.mod_last_delivery_date,
                 models_data_raw.mdl_bld_dt
-                ).repartition(60)
+                )
 
     print("Final_df_stage")
-    # _final_df_stage.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
+    # _final_df_stage.show()
 
     ########################################
     from pyspark.sql.window import Window
@@ -388,6 +394,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
 
     # valid_model_flag = (udf(_is_model_valid, BooleanType())(col('delivery_date'), col('mod_last_delivery_date'), col('mdl_bld_dt'), max(col('mdl_bld_dt').filter(lambda _date: _date < col('mod_last_delivery_date'))).alias('min_mdl_bld_dt')))
     _final_df = _final_df_stage \
+        .repartition(REPARTITION_VAL) \
         .select(col('customernumber'),
                 col('mat_no'),
                 col('order_date'),
@@ -402,16 +409,16 @@ def _generate_invoice(sc, sqlContext, **kwargs):
         .withColumn('mdl_validity',
                     udf(_is_model_valid, BooleanType())(col('delivery_date'), col('mod_last_delivery_date'),
                                                         col('mdl_bld_dt'), col('min_mdl_bld_dt'))) \
-        .filter(col('mdl_validity') == True) \
-        .repartition(60)
+        .filter(col('mdl_validity') == True)
 
     print("Final_df")
-    # _final_df.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
+    # _final_df.show()
 
-    _prediction_df_raw = _get_prediction_list(sqlContext=sqlContext, testing=TESTING).repartition(60)
+    _prediction_df_raw = _get_prediction_list(sqlContext=sqlContext, testing=TESTING) \
+        .repartition(REPARTITION_VAL)
 
     print ("prediction_df_raw")
-    # _prediction_df_raw.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
+    # _prediction_df_raw.show()
 
     _final_df_prediction_df_raw_condition = [_final_df.customernumber == _prediction_df_raw.customernumber,
                                              _final_df.mat_no == _prediction_df_raw.mat_no,
@@ -419,6 +426,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
 
     _temp_df = _prediction_df_raw \
         .join(_final_df, on=_final_df_prediction_df_raw_condition, how='inner') \
+        .repartition(REPARTITION_VAL) \
         .select(_prediction_df_raw.customernumber,
                 _prediction_df_raw.mat_no,
                 _prediction_df_raw.pred_val,
@@ -428,11 +436,10 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 _final_df.mod_last_delivery_date,
                 _final_df.mdl_bld_dt
                 ) \
-        .withColumn('scale_denom', when(col('pdt_cat').isin('I', 'II', 'III', 'VII'), 7).otherwise(31)) \
-        .repartition(60)
+        .withColumn('scale_denom', when(col('pdt_cat').isin('I', 'II', 'III', 'VII'), 7).otherwise(31))
 
     print("_temp_df")
-    # _temp_df.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
+    # _temp_df.show()
     # _temp_df.printSchema()
 
     _temp_df_rdd_mapped = _temp_df.flatMap(lambda _row: map_pred_val_to_week_month_year(_row))
@@ -446,6 +453,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     #     .rangeBetween(-sys.maxsize, sys.maxsize)
 
     _temp_df_flat = sqlContext.createDataFrame(_temp_df_rdd_mapped, schema=_pred_val_to_week_month_year_schema()) \
+        .repartition(REPARTITION_VAL) \
         .select(col('customernumber'),
                 col('mat_no'),
                 col('week_month_key'),
@@ -467,32 +475,31 @@ def _generate_invoice(sc, sqlContext, **kwargs):
         .withColumn('_partial_quantity_temp', (col('pred_val') / col('scale_denom')) * col('_partial_diff')) \
         .withColumn('_partial_quantity', round(col('_partial_quantity_temp'), 2)) \
         .drop(col('_partial_quantity_temp')) \
-        .drop(col('mdl_bld_dt')) \
-        .repartition(60)
+        .drop(col('mdl_bld_dt'))
 
     print("temp_df_flat")
-    # _temp_df_flat.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
+    # _temp_df_flat.show()
 
-    _remainder_df = _get_remainder(sqlContext=sqlContext, testing=TESTING).repartition(60)
+    _remainder_df = _get_remainder(sqlContext=sqlContext, testing=TESTING) \
+        .repartition(REPARTITION_VAL)
 
     print ("remainder_df")
-    # _remainder_df.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
+    # _remainder_df.show()
 
     print("result_df_stage")
     result_df_stage = _temp_df_flat \
+        .repartition(REPARTITION_VAL) \
         .select(col('customernumber'), col('mat_no'), col('delivery_date'), col('_partial_quantity')) \
         .withColumn('order_date', lit(order_date)) \
         .groupBy(col('customernumber'), col('mat_no'), col('order_date'), col('delivery_date')) \
         .agg(
         round(sum(col('_partial_quantity')), 2).alias('quantity_stg')
-    ) \
-        .repartition(60)
+    )
 
-    # result_df_stage.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
+    # result_df_stage.show()
 
     print("Writing raw invoice to HDFS")
     result_df_stage \
-        .coalesce(1) \
         .write.mode('append') \
         .format('orc') \
         .option("header", "false") \
@@ -503,6 +510,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
 
     result_df = result_df_stage \
         .join(_remainder_df, on=result_df_stage_remainder_df_cond, how='left_outer') \
+        .repartition(REPARTITION_VAL) \
         .select(result_df_stage.customernumber,
                 result_df_stage.mat_no,
                 result_df_stage.order_date,
@@ -515,8 +523,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
         .withColumn('quantity', floor(col('quantity_temp')).cast(FloatType())) \
         .withColumn('remainder', round((col('quantity_temp') - col('quantity')), 2).cast(FloatType())) \
         .select(col('customernumber'), col('mat_no'), col('order_date'), col('delivery_date'), col('quantity'),
-                col('remainder')) \
-        .repartition(60)
+                col('remainder'))
 
     # .withColumn('carryover', when(col('carryover_stg') == None, 0.0).otherwise(col('carryover_stg')).cast(FloatType()))\
 
@@ -524,13 +531,12 @@ def _generate_invoice(sc, sqlContext, **kwargs):
 
     print("result_df")
     # result_df.cache()
-    # result_df.filter(col('customernumber').like('0500064458') & col('mat_no').like('000000000000119826')).show()
+    # result_df.show()
     # print(result_df.count())
 
 
     print("Writing invoice to HDFS")
     result_df \
-        .coalesce(1) \
         .write.mode('append') \
         .format('orc') \
         .option("header", "false") \
@@ -541,7 +547,12 @@ def _generate_invoice(sc, sqlContext, **kwargs):
 if __name__ == "__main__":
 
     order_dates = get_order_dates_between(start_date=START_DATE_ORDER, end_date=END_DATE_ORDER)
-    print order_dates
+    # print " ".join(order_dates)
+    a = ""
+    for elem in order_dates:
+        a = a + "\'" + elem + "\'" + " "
+
+    print a
 
     # for order_date in order_dates:
     #     print type(order_date)

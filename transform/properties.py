@@ -12,9 +12,19 @@ invoice_q = """
     ) b
     join
     (
+    select sample_customer.customernumber customernumber, master_customer.dlvry_lag dlvry_lag
+    from
+    (
+    select customernumber
+    from predicted_order.view_sample_customer_FL_200
+    ) sample_customer
+    join
+    (
     select kunnr customernumber, IF(vsbed == '01', 2, 1) dlvry_lag
     from mdm.customer
-    where vkbur='C005'
+    ) master_customer
+    on
+    sample_customer.customernumber = master_customer.customernumber
     ) c
     on
     b.customernumber = c.customernumber
