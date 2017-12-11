@@ -1,5 +1,5 @@
 """
-
+author: rajarshi
 """
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import HiveContext
@@ -31,13 +31,11 @@ _visit_list = _get_visit_list_from_invoice(sqlContext=sqlContext, start_date=STA
 
 _visit_list.cache()
 
-# Get all order dates between START_DATE_ORDER and END_DATE_ORDER
-ORDER_DATES = get_order_dates_between(start_date=START_DATE_ORDER, end_date=END_DATE_ORDER)
+# # Get all order dates between START_DATE_ORDER and END_DATE_ORDER
+# ORDER_DATES = get_order_dates_between(start_date=START_DATE_ORDER, end_date=END_DATE_ORDER)
 
-# ORDER_DATES = ['2017-09-06', '2017-09-13']
-
-# # For testing
-# # order_date = ORDER_DATES[1]
+ORDER_DATES = ["".join(sys.argv[1])]
+print ORDER_DATES
 
 # Loop through all order dates to generate invoices of each date.
 for order_date in ORDER_DATES:

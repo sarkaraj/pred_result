@@ -14,13 +14,28 @@ def _get_invoice_data(sqlContext, **kwargs):
     CRITERIA_DATE = kwargs.get('CRITERIA_DATE')
     q_2 = """
     select a.kunag customernumber, a.matnr mat_no, max(a.fkdat) bill_date
-    from skuopt.invoices a
-    where a.kunag in"""
-    cust_list = CUSTOMER_LIST
+    from
+    (
+    select master_invoice.*
+    from
+    (
+    select *
+    from skuopt.invoices
+    ) master_invoice
+    join
+    (
+    select customernumber
+    from predicted_order.view_sample_customer_FL_200
+    ) sample_customer
+    on
+    master_invoice.kunag = sample_customer.customernumber
+    ) a"""
+    # cust_list = CUSTOMER_LIST
 
-    _condition = """and a.fkdat <= """ + CRITERIA_DATE + """ group by a.kunag,a.matnr"""
+    _condition = """where a.fkdat <= """ + CRITERIA_DATE + """ group by a.kunag,a.matnr"""
 
-    _query = " ".join([q_2, cust_list, _condition])
+    # _query = " ".join([q_2, cust_list, _condition])
+    _query = " ".join([q_2, _condition])
 
     _invoice_raw_data = sqlContext.sql(_query) \
         .withColumn('b_date', from_unixtime(unix_timestamp(col('bill_date'), "yyyyMMdd")).cast(DateType())) \
