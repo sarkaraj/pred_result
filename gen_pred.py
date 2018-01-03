@@ -9,8 +9,7 @@ from transform.support_func import _get_visit_list_from_invoice
 from support_func import get_current_date
 from properties import *
 
-
-appName = "_".join(["CSO_TESTING_", get_current_date()])
+appName = "_".join(["CSO_INVOICE_GEN_", get_current_date()])
 conf = SparkConf() \
     .setAppName(appName) \
     .set("spark.io.compression.codec", "snappy")

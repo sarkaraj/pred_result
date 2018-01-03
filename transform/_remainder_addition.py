@@ -5,6 +5,8 @@ from pyspark.sql.types import *
 def _get_remainder(sqlContext, **kwargs):
     testing = kwargs.get('testing')
 
+    # TODO: Parameterize query
+
     if testing:
         _q = """select b.customernumber customernumber, b.mat_no mat_no, b.remainder remainder
                 from

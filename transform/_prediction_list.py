@@ -8,6 +8,8 @@ def _get_models_list(sqlContext, **kwargs):
     CRITERIA_DATE = kwargs.get('CRITERIA_DATE')
     testing = kwargs.get('testing')
 
+    # TODO: Parameterize query
+
     if testing:
         q = """select customernumber, mat_no, mdl_bld_dt, cutoff_date
         from predicted_order.view_consolidated_pred_complete_model_eda
@@ -26,6 +28,8 @@ def _get_models_list(sqlContext, **kwargs):
 
 def _get_prediction_list(sqlContext, **kwargs):
     testing = kwargs.get('testing')
+
+    # TODO: Parameterize query
 
     if testing:
         q = """select customernumber, mat_no, mdl_bld_dt, cutoff_date, pred_val, pdt_cat

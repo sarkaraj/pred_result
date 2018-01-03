@@ -1,4 +1,6 @@
-CUSTOMER_LIST = """('0500083147','0500061438','0500067084','0500058324','0500080723','0500060033','0500068825','0500060917','0500078551','0500076115','0500071747','0500078478','0500078038','0500073982','0500064458','0500268924','0500070702','0500070336','0500076032','0500095883','0500284889')"""
+CUSTOMER_LIST = ""
+
+CUSTOMER_LIST_TABLE = """predicted_order.customerdata_CCBF"""
 
 invoice_q = """
     select d.customernumber customernumber, d.matnr matnr, d.bill_date bill_date, IF(d.units != 'CS', d.quantity * (f.umrez / f.umren), d.quantity) quantity, d.dlvry_lag dlvry_lag
@@ -16,8 +18,8 @@ invoice_q = """
     from
     (
     select customernumber
-    from predicted_order.view_sample_customer_FL_200
-    ) sample_customer
+    from """ + CUSTOMER_LIST_TABLE \
+            + """) sample_customer
     join
     (
     select kunnr customernumber, IF(vsbed == '01', 2, 1) dlvry_lag
