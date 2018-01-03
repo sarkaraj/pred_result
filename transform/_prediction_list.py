@@ -9,12 +9,12 @@ def _get_models_list(sqlContext, **kwargs):
     testing = kwargs.get('testing')
 
     if testing:
-        q = """select customernumber, mat_no, mdl_bld_dt 
+        q = """select customernumber, mat_no, mdl_bld_dt, cutoff_date
         from predicted_order.view_consolidated_pred_complete_model_eda
         where to_date(from_unixtime(unix_timestamp(mdl_bld_dt , 'yyyy-MM-dd'))) < to_date(from_unixtime(unix_timestamp(""" + "\'" + CRITERIA_DATE + "\'" + """, 'yyyy-MM-dd')))
         """
     else:
-        q = """select customernumber, mat_no, mdl_bld_dt 
+        q = """select customernumber, mat_no, mdl_bld_dt, cutoff_date
         from predicted_order.final_table
         where to_date(from_unixtime(unix_timestamp(mdl_bld_dt , 'yyyy-MM-dd'))) < to_date(from_unixtime(unix_timestamp(""" + "\'" + CRITERIA_DATE + "\'" + """, 'yyyy-MM-dd')))
         """
@@ -28,10 +28,10 @@ def _get_prediction_list(sqlContext, **kwargs):
     testing = kwargs.get('testing')
 
     if testing:
-        q = """select customernumber, mat_no, mdl_bld_dt, pred_val, pdt_cat
+        q = """select customernumber, mat_no, mdl_bld_dt, cutoff_date, pred_val, pdt_cat
         from predicted_order.view_consolidated_pred_complete_model_eda"""
     else:
-        q = """select customernumber, mat_no, mdl_bld_dt, pred_val, pdt_cat
+        q = """select customernumber, mat_no, mdl_bld_dt, cutoff_date, pred_val, pdt_cat
         from predicted_order.final_table"""
 
     _prediction_data = sqlContext.sql(q)

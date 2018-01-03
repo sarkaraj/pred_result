@@ -187,11 +187,12 @@ def map_pred_val_to_week_month_year(row_object, **kwargs):
     delivery_date = row_object.delivery_date
     mod_last_delivery_date = row_object.mod_last_delivery_date
     mdl_bld_dt = row_object.mdl_bld_dt
+    cutoff_date = row_object.cutoff_date
     scale_denom = row_object.scale_denom
 
     # _result = (customernumber, mat_no, pred_val_dict, pdt_cat, order_date, delivery_date, mod_last_delivery_date, mdl_bld_dt, scale_denom)
     _result = [(customernumber, mat_no, key, float(pred_val_dict.get(key)), pdt_cat, order_date, delivery_date,
-                mod_last_delivery_date, mdl_bld_dt, float(scale_denom)) for key in pred_val_dict.keys()]
+                mod_last_delivery_date, mdl_bld_dt, cutoff_date, float(scale_denom)) for key in pred_val_dict.keys()]
 
     return _result
 
@@ -206,11 +207,12 @@ def _pred_val_to_week_month_year_schema():
     delivery_date = StructField("delivery_date", StringType(), nullable=True)
     mod_last_delivery_date = StructField("mod_last_delivery_date", StringType(), nullable=True)
     mdl_bld_dt = StructField("mdl_bld_dt", StringType(), nullable=True)
+    cutoff_date = StructField("cutoff_date", StringType(), nullable=True)
     scale_denom = StructField("scale_denom", FloatType(), nullable=True)
 
     _schema = StructType(
         [customernumber, mat_no, week_month_key, pred_val, pdt_cat, order_date, delivery_date, mod_last_delivery_date,
-         mdl_bld_dt, scale_denom])
+         mdl_bld_dt, cutoff_date, scale_denom])
 
     return _schema
 
@@ -255,14 +257,14 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     order_date = kwargs.get('order_date')
 
     # Filters out the visit list for the provided order_date
-    vl_df = _get_visit_list(sc=sc, sqlContext=sqlContext, order_date=order_date,
-                            visit_list=_visit_list)  # # Gets the visit list for a given order date
+    vl_df = _get_visit_list(sc=sc, sqlContext=sqlContext, order_date=order_date, visit_list=_visit_list)
 
     # # Used to the authorised material list for a particular 'vkbur'
     # aglu_df = _get_aglu_list(sc=sc, sqlContext=sqlContext)
 
 
     vl_df.registerTempTable("vl_sql")
+
     # # query to join the visit list with authorised material list to obtain a complete set of products for all scheduled visits.
     # # TODO: Clarify is there is any method to isolate the materials for a particular visit
 
@@ -294,11 +296,13 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     # """
 
     # Query to join the visit list to the customer master table to obtain delivery lag for a customer
+
+    # # query to join the visit list with authorised material list to obtain a complete set of products for all scheduled visits.
     q = """
     select e.*
     from
     (
-    select b.customernumber customernumber, b.mat_no mat_no, b.order_date order_date, d.scl_auth_matlst scl_auth_matlst, d.vkbur vkbur, IF(d.vsbed == '01', 2, 1) dlvry_lag
+    select b.customernumber customernumber, b.mat_no mat_no, b.order_date order_date, d.vkbur vkbur, IF(d.vsbed == '01', 2, 1) dlvry_lag
     from
     (
     select a.customernumber customernumber, a.mat_no mat_no, a.order_date order_date
@@ -306,7 +310,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     ) b
     join
     (
-    select c.kunnr customernumber, c.scl_auth_matlst scl_auth_matlst, c.vkbur vkbur, c.vsbed vsbed
+    select c.kunnr customernumber, c.vkbur vkbur, c.vsbed vsbed
     from mdm.customer c
     ) d
     on d.customernumber = b.customernumber
@@ -316,7 +320,6 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     # # Obtaining delivery_date from given order_date provided the delivery_lag
     visit_list_final = sqlContext.sql(q) \
         .repartition(REPARTITION_VAL) \
-        .drop(col('scl_auth_matlst')) \
         .withColumn('delivery_date', udf(_get_delivery_date, StringType())(col('order_date'), col('dlvry_lag'))) \
         .drop(col('dlvry_lag'))
 
@@ -376,7 +379,8 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 visit_list_final_join_invoice_raw.vkbur,
                 visit_list_final_join_invoice_raw.delivery_date,
                 visit_list_final_join_invoice_raw.mod_last_delivery_date,
-                models_data_raw.mdl_bld_dt
+                models_data_raw.mdl_bld_dt,
+                models_data_raw.cutoff_date
                 )
 
     print("Final_df_stage")
@@ -393,6 +397,8 @@ def _generate_invoice(sc, sqlContext, **kwargs):
         .rangeBetween(-sys.maxsize, sys.maxsize)
 
     # valid_model_flag = (udf(_is_model_valid, BooleanType())(col('delivery_date'), col('mod_last_delivery_date'), col('mdl_bld_dt'), max(col('mdl_bld_dt').filter(lambda _date: _date < col('mod_last_delivery_date'))).alias('min_mdl_bld_dt')))
+
+    # # TODO: Update 1 here to account for cutoff_date modification as discussed.
     _final_df = _final_df_stage \
         .repartition(REPARTITION_VAL) \
         .select(col('customernumber'),
@@ -402,6 +408,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 col('delivery_date'),
                 col('mod_last_delivery_date'),
                 col('mdl_bld_dt'),
+                col('cutoff_date'),
                 (max(udf(_get_max_date_spprt_func_1, DateType())(col('mdl_bld_dt'),
                                                                  col('mod_last_delivery_date')))).over(
                     window=cust_pdt_mdl_bld_dt_window).cast(StringType()).alias('min_mdl_bld_dt')
@@ -409,7 +416,21 @@ def _generate_invoice(sc, sqlContext, **kwargs):
         .withColumn('mdl_validity',
                     udf(_is_model_valid, BooleanType())(col('delivery_date'), col('mod_last_delivery_date'),
                                                         col('mdl_bld_dt'), col('min_mdl_bld_dt'))) \
-        .filter(col('mdl_validity') == True)
+        .filter(col('mdl_validity') == True) \
+        .select(col('customernumber'),
+                col('mat_no'),
+                col('order_date'),
+                col('vkbur'),
+                col('delivery_date'),
+                col('mod_last_delivery_date'),
+                col('mdl_bld_dt'),
+                col('cutoff_date'),
+                (max(udf(string_to_gregorian, DateType())(col('cutoff_date')))).over(
+                    window=Window.partitionBy("customernumber", "mat_no", "mdl_bld_dt").orderBy(
+                        "cutoff_date").rangeBetween(-sys.maxsize, sys.maxsize)).cast(
+                    StringType()).alias('latest_cutoff_date')
+                ) \
+        .filter(col('cutoff_date') == col('latest_cutoff_date'))
 
     print("Final_df")
     # _final_df.show()
@@ -422,7 +443,8 @@ def _generate_invoice(sc, sqlContext, **kwargs):
 
     _final_df_prediction_df_raw_condition = [_final_df.customernumber == _prediction_df_raw.customernumber,
                                              _final_df.mat_no == _prediction_df_raw.mat_no,
-                                             _final_df.mdl_bld_dt == _prediction_df_raw.mdl_bld_dt]
+                                             _final_df.mdl_bld_dt == _prediction_df_raw.mdl_bld_dt,
+                                             _final_df.cutoff_date == _prediction_df_raw.cutoff_date]
 
     _temp_df = _prediction_df_raw \
         .join(_final_df, on=_final_df_prediction_df_raw_condition, how='inner') \
@@ -434,7 +456,8 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 _final_df.order_date.cast(StringType()),
                 _final_df.delivery_date,
                 _final_df.mod_last_delivery_date,
-                _final_df.mdl_bld_dt
+                _final_df.mdl_bld_dt,
+                _final_df.cutoff_date
                 ) \
         .withColumn('scale_denom', when(col('pdt_cat').isin('I', 'II', 'III', 'VII'), 7).otherwise(31))
 
@@ -452,6 +475,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     #     .orderBy(_final_df_stage.mdl_bld_dt) \
     #     .rangeBetween(-sys.maxsize, sys.maxsize)
 
+    # # TODO: Update 2 here to account for cutoff_date modification as discussed.
     _temp_df_flat = sqlContext.createDataFrame(_temp_df_rdd_mapped, schema=_pred_val_to_week_month_year_schema()) \
         .repartition(REPARTITION_VAL) \
         .select(col('customernumber'),
@@ -462,6 +486,7 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 col('delivery_date'),
                 col('mod_last_delivery_date').alias('last_delivery_date'),
                 col('mdl_bld_dt'),
+                col('cutoff_date'),
                 col('scale_denom'),
                 (max(udf(string_to_gregorian, DateType())(col('mdl_bld_dt')))).over(
                     window=Window.partitionBy("customernumber", "mat_no", "week_month_key").orderBy(
