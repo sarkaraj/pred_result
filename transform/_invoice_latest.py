@@ -1,4 +1,4 @@
-from properties import CUSTOMER_LIST, CUSTOMER_LIST_TABLE
+from properties import CUSTOMER_LIST, TABLE_CUSTOMER_LIST
 from support_func import _get_dt_frm_b_date
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
@@ -25,7 +25,7 @@ def _get_invoice_data(sqlContext, **kwargs):
     join
     (
     select customernumber
-    from """ + CUSTOMER_LIST_TABLE \
+    from """ + TABLE_CUSTOMER_LIST \
           + """) sample_customer
     on
     master_invoice.kunag = sample_customer.customernumber

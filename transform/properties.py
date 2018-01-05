@@ -1,6 +1,10 @@
 CUSTOMER_LIST = ""
 
-CUSTOMER_LIST_TABLE = """predicted_order.customerdata_CCBF"""
+TABLE_CUSTOMER_LIST = """predicted_order.customerdata_CCBF"""
+
+VIEW_COMPLETE_PREDICTION = """predicted_order.view_consolidated_pred_complete_CCBF"""
+TABLE_CSO_PREDICTION = """predicted_order.cso_prediction_CCBF"""
+TABLE_P_CSO_PREDICTION = """predicted_order.prediction_personal_CCBF"""
 
 invoice_q = """
     select d.customernumber customernumber, d.matnr matnr, d.bill_date bill_date, IF(d.units != 'CS', d.quantity * (f.umrez / f.umren), d.quantity) quantity, d.dlvry_lag dlvry_lag
@@ -18,7 +22,7 @@ invoice_q = """
     from
     (
     select customernumber
-    from """ + CUSTOMER_LIST_TABLE \
+    from """ + TABLE_CUSTOMER_LIST \
             + """) sample_customer
     join
     (

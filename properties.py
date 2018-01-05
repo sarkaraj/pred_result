@@ -6,12 +6,16 @@ END_DATE_INVOICE = '2017-11-10'  # # Date is INCLUSIVE
 
 SIMULATION_START_DATE = '2017-07-02'
 
-FINAL_PREDICTION_LOCATION = "/CONA_CSO/final_predicted"
-_PREDICTION_LOCATION = "/CONA_CSO/rajarshi_predicted"
+# FINAL_PREDICTION_LOCATION = "/CONA_CSO/final_predicted"
+# _PREDICTION_LOCATION = "/CONA_CSO/rajarshi_predicted"
 
-#
+
 # FINAL_PREDICTION_LOCATION = "/CONA_CSO/model_eda/final_predicted"
 # _PREDICTION_LOCATION = "/CONA_CSO/model_eda/rajarshi_predicted"
+
+
+FINAL_PREDICTION_LOCATION = "/CONA_CSO/CCBF/final_predicted"
+_PREDICTION_LOCATION = "/CONA_CSO/CCBF/rajarshi_predicted"
 
 pdt_cat_denominator = {'I': 7.0, 'II': 7.0, 'III': 7.0, 'VII': 7.0, 'IV': 31.0, 'V': 31.0, 'VI': 31.0, 'VIII': 31.0,
                           'IX': 31.0,

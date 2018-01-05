@@ -5,10 +5,10 @@ def _get_models_list(sqlContext, **kwargs):
     :param kwargs: CRITERIA_DATE --> order date
     :return: Spark Dataframe of raw prediction data
     '''
+
+    from properties import VIEW_COMPLETE_PREDICTION
     CRITERIA_DATE = kwargs.get('CRITERIA_DATE')
     testing = kwargs.get('testing')
-
-    # TODO: Parameterize query
 
     if testing:
         q = """select customernumber, mat_no, mdl_bld_dt, cutoff_date
@@ -16,10 +16,7 @@ def _get_models_list(sqlContext, **kwargs):
         where to_date(from_unixtime(unix_timestamp(mdl_bld_dt , 'yyyy-MM-dd'))) < to_date(from_unixtime(unix_timestamp(""" + "\'" + CRITERIA_DATE + "\'" + """, 'yyyy-MM-dd')))
         """
     else:
-        q = """select customernumber, mat_no, mdl_bld_dt, cutoff_date
-        from predicted_order.final_table
-        where to_date(from_unixtime(unix_timestamp(mdl_bld_dt , 'yyyy-MM-dd'))) < to_date(from_unixtime(unix_timestamp(""" + "\'" + CRITERIA_DATE + "\'" + """, 'yyyy-MM-dd')))
-        """
+        q = """select customernumber, mat_no, mdl_bld_dt, cutoff_date from """ + VIEW_COMPLETE_PREDICTION + """ where to_date(from_unixtime(unix_timestamp(mdl_bld_dt , 'yyyy-MM-dd'))) < to_date(from_unixtime(unix_timestamp(""" + "\'" + CRITERIA_DATE + "\'" + """, 'yyyy-MM-dd')))"""
 
     _model_bld_data = sqlContext.sql(q)
 
@@ -27,6 +24,7 @@ def _get_models_list(sqlContext, **kwargs):
 
 
 def _get_prediction_list(sqlContext, **kwargs):
+    from properties import VIEW_COMPLETE_PREDICTION
     testing = kwargs.get('testing')
 
     # TODO: Parameterize query
@@ -36,7 +34,7 @@ def _get_prediction_list(sqlContext, **kwargs):
         from predicted_order.view_consolidated_pred_complete_model_eda"""
     else:
         q = """select customernumber, mat_no, mdl_bld_dt, cutoff_date, pred_val, pdt_cat
-        from predicted_order.final_table"""
+        from """ + VIEW_COMPLETE_PREDICTION
 
     _prediction_data = sqlContext.sql(q)
     return _prediction_data
