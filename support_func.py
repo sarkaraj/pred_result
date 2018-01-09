@@ -244,6 +244,23 @@ def _calculate_quantity(pred_val, scale_denom, partial_diff):
     _result = round(((_pred_val / _scale_denom) * _partial_diff), 2)
     return _result
 
+
+def _get_string_from_cols(week_month_key, pred_val, pdt_cat, mdl_bld_dt, cutoff_date, _partial_diff, _partial_quantity,
+                          **kwargs):
+    _v_week_month_key = " ".join(['week_month_key', str(week_month_key)])
+    _v_pred_val = " ".join(['pred_val', str(pred_val)])
+    _v_pdt_cat = " ".join(['pdt_cat', str(pdt_cat)])
+    _v_mdl_bld_dt = " ".join(['mdl_bld_dt', str(mdl_bld_dt)])
+    _v_cutoff_date = " ".join(['cutoff_date', str(cutoff_date)])
+    _v__partial_diff = " ".join(['_partial_diff', str(_partial_diff)])
+    _v__partial_quantity = " ".join(['_partial_quantity', str(_partial_quantity)])
+
+    _result_string = ",".join(
+        [_v_week_month_key, _v_pred_val, _v_pdt_cat, _v_mdl_bld_dt, _v_cutoff_date, _v__partial_diff,
+         _v__partial_quantity])
+    return _result_string
+
+
 def _generate_invoice(sc, sqlContext, **kwargs):
     from transform._invoice_latest import _get_invoice_data
     from transform._prediction_list import _get_models_list, _get_prediction_list
@@ -499,6 +516,13 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                                                                                 col('last_delivery_date'))) \
         .withColumn('_partial_quantity_temp', (col('pred_val') / col('scale_denom')) * col('_partial_diff')) \
         .withColumn('_partial_quantity', round(col('_partial_quantity_temp'), 2)) \
+        .withColumn('identification_params', udf(_get_string_from_cols, StringType())(col('week_month_key'),
+                                                                                      col('pred_val'),
+                                                                                      col('pdt_cat'),
+                                                                                      col('mdl_bld_dt'),
+                                                                                      col('cutoff_date'),
+                                                                                      col('_partial_diff'),
+                                                                                      col('_partial_quantity'))) \
         .drop(col('_partial_quantity_temp')) \
         .drop(col('mdl_bld_dt'))
 
@@ -514,14 +538,17 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     print("result_df_stage")
     result_df_stage = _temp_df_flat \
         .repartition(REPARTITION_VAL) \
-        .select(col('customernumber'), col('mat_no'), col('delivery_date'), col('_partial_quantity')) \
+        .select(col('customernumber'), col('mat_no'), col('delivery_date'), col('_partial_quantity'),
+                col('identification_params')) \
         .withColumn('order_date', lit(order_date)) \
         .groupBy(col('customernumber'), col('mat_no'), col('order_date'), col('delivery_date')) \
         .agg(
-        round(sum(col('_partial_quantity')), 2).alias('quantity_stg')
+        round(sum(col('_partial_quantity')), 2).alias('quantity_stg'),
+        collect_list(col('identification_params')).alias('identification_param_set')
     )
 
-    # result_df_stage.show()
+    # result_df_stage.show(5)
+    # result_df_stage.printSchema()
 
     print("Writing raw invoice to HDFS")
     result_df_stage \
