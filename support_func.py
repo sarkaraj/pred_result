@@ -125,10 +125,11 @@ def _get_delivery_date(date, lag):
     return str(np.busday_offset(_date, _lag, roll='forward'))
 
 
-def _get_tweaked_last_del_dt(input_date, **kwargs):
+def _get_tweaked_last_del_dt(last_delivery_date, salesrep_store_visit, **kwargs):
     '''
     If last_delivery_date is < _SIMULATION_START_DATE then last_delivery_date = _SIMULATION_START_DATE
-    :param input_date: last_delivery_date
+    :param last_delivery_date: last_delivery_date
+    :param salesrep_store_visit: last date when sales rep went to the store before the order_date
     :param kwargs: SIMULATION_START_DATE from properties file
     :return: tweaked_last_delivery_date : String of format 'yyyy-MM-dd'
     '''
@@ -140,13 +141,14 @@ def _get_tweaked_last_del_dt(input_date, **kwargs):
     else:
         _SIMULATION_START_DATE = SIMULATION_START_DATE  # # SIMULATION_START_DATE is a string of format 'yyyy-MM-dd'
 
-    _input_date = string_to_gregorian(input_date)
+    _input_date = string_to_gregorian(last_delivery_date)
     _check_date = string_to_gregorian(_SIMULATION_START_DATE)
+    _salesrep_store_visit = string_to_gregorian(salesrep_store_visit)
 
     if (_input_date < _check_date):
         return _check_date.strftime('%Y-%m-%d')
     else:
-        return _input_date.strftime('%Y-%m-%d')
+        return _salesrep_store_visit.strftime('%Y-%m-%d')
 
 
 def _is_model_valid(delivery_dt, lst_delivery_dt, mdl_bld_dt, min_mdl_bld_dt):
@@ -267,6 +269,11 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     from properties import FINAL_PREDICTION_LOCATION, _PREDICTION_LOCATION, TESTING, REPARTITION_VAL
     from transform._remainder_addition import _get_remainder
 
+    ########################################
+    from pyspark.sql.window import Window
+    import sys
+    ########################################
+
     # Get visit list as an argument
     _visit_list = kwargs.get('visit_list')
 
@@ -364,9 +371,12 @@ def _generate_invoice(sc, sqlContext, **kwargs):
                 visit_list_final.order_date,
                 visit_list_final.vkbur,
                 visit_list_final.delivery_date,
-                invoice_raw.last_delivery_date) \
-        .withColumn('mod_last_delivery_date', udf(_get_tweaked_last_del_dt, StringType())(col('last_delivery_date'))) \
-        .drop(col('last_delivery_date'))
+                invoice_raw.last_delivery_date
+                ) \
+        .withColumn('mod_last_delivery_date',
+                    udf(_get_tweaked_last_del_dt, StringType())(col('last_delivery_date'), col('salesrep_store_visit'))) \
+        .drop(col('last_delivery_date')) \
+        .drop(col('salesrep_store_visit'))
 
 
 
@@ -403,10 +413,6 @@ def _generate_invoice(sc, sqlContext, **kwargs):
     print("Final_df_stage")
     # _final_df_stage.show()
 
-    ########################################
-    from pyspark.sql.window import Window
-    import sys
-    ########################################
 
     cust_pdt_mdl_bld_dt_window = Window \
         .partitionBy(_final_df_stage.customernumber, _final_df_stage.mat_no) \
