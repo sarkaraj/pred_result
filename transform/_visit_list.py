@@ -46,23 +46,17 @@ def _schema_vl ():
 	return schema
 
 
-def _schema_vl_2 ():
-	# cdVisitInstance,cdClassification,Login,cdOrgUnit,nmDisplay,cdAccount,dsName,dtPlannedStart,dtPlannedEnd,
-	# dtLastModified,
-	cdVisitInstance = StructField("cdVisitInstance", StringType(), nullable = True)
-	cdClassification = StructField("cdClassification", StringType(), nullable = True)
-	Login = StructField("Login", StringType(), nullable = True)
-	cdOrgUnit = StructField("cdOrgUnit", StringType(), nullable = True)
-	nmDisplay = StructField("nmDisplay", StringType(), nullable = True)
-	cdAccount = StructField("cdAccount", StringType(), nullable = True)
-	dsName = StructField("dsName", StringType(), nullable = True)
-	dtPlannedStart = StructField("dtPlannedStart", StringType(), nullable = True)
-	dtPlannedEnd = StructField("dtPlannedEnd", StringType(), nullable = True)
-	dtLastModified = StructField("dtLastModified", StringType(), nullable = True)
+def _schema_aglu ():
+	MANDT = StructField("MANDT", StringType(), nullable = True)
+	VKORG = StructField("VKORG", StringType(), nullable = True)
+	VTWEG = StructField("VTWEG", StringType(), nullable = True)
+	AUTH_MATLST = StructField("AUTH", StringType(), nullable = True)
+	MATNR = StructField("MATNR", StringType(), nullable = True)
+	LOEVM = StructField("LOEVM", StringType(), nullable = True)
+	AENDT = StructField("AENDT", StringType(), nullable = True)
+	AENUHR = StructField("AENUHR", StringType(), nullable = True)
 
-	schema = StructType(
-		[cdVisitInstance, cdClassification, Login, cdOrgUnit, nmDisplay, cdAccount, dsName, dtPlannedStart,
-		 dtPlannedEnd, dtLastModified])
+	schema = StructType([MANDT, VKORG, VTWEG, AUTH_MATLST, MATNR, LOEVM, AENDT, AENUHR])
 	return schema
 
 
@@ -144,6 +138,10 @@ def _get_generated_visit_list (sc, sqlContext):
 	return None
 
 
+def blank_as_null (x):
+	return when(col(x) != "", col(x)).otherwise(None)
+
+
 if __name__ == "__main__":
 	import numpy as np
 	from pyspark import SparkContext, SparkConf
@@ -169,53 +167,78 @@ if __name__ == "__main__":
 	print "Setting LOG LEVEL as ERROR"
 	sc.setLogLevel("ERROR")
 
-	dataset_1 = sqlContext.read.format('com.databricks.spark.csv') \
-		.options(header = 'true', inferschema = 'false') \
-		.option("delimiter", ',') \
-		.load('C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_VL.csv')
+	raw_vl_head = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_VL.csv").first()
+	raw_vl = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_VL.csv") \
+		.filter(lambda x: x != raw_vl_head) \
+		.map(lambda x: x.split(",")) \
+		.map(lambda x: [None if elem == "" else elem for elem in x])
 
-	dataset_1.show(10)
+	# print(raw_vl.take(1))
+	# print(raw_vl_head)
 
-	dataset_2 = sqlContext.read.format('com.databricks.spark.csv') \
-		.options(header = 'true', inferschema = 'false') \
-		.option("delimiter", ',') \
-		.load('C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_AGLU.csv')
+	raw_aglu_head = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_AGLU.csv").first()
+	raw_aglu = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_AGLU.csv") \
+		.filter(lambda x: x != raw_aglu_head) \
+		.map(lambda x: x.split(",")) \
+		.map(lambda x: [None if elem == "" else elem for elem in x])
 
-	dataset_2.show(10)
+	# print(raw_aglu.take(1))
+	# print(raw_aglu_head)
 
-	auth_list = dataset_2 \
-		.select(col("VKORG"),
-				col("/SCL/AUTH_MATLST")) \
-		.groupBy(col("VKORG")).agg(approxCountDistinct(col("/SCL/AUTH_MATLST")))
+	vl_schema = _schema_vl()
+	aglu_schema = _schema_aglu()
 
-	auth_list.show()
+	vl_raw_df = sqlContext.createDataFrame(raw_vl, schema = vl_schema)
+	aglu_raw_df = sqlContext.createDataFrame(raw_aglu, schema = aglu_schema)
 
-	visit_list = dataset_1 \
+	print("Visit List")
+	# vl_raw_df.show(10)
+	print("Authorization List")
+	# aglu_raw_df.show(10)
+
+	visit_list = vl_raw_df \
 		.select(col("KUNNR"),
 				col("VKORG"),
-				col("AUTH")) \
-		.groupBy(col("VKORG")).agg(approxCountDistinct(col("KUNNR")))
+				col("AUTH"),
+				col("VTWEG"),
+				col("MANDT"),
+				col("EXDAT").alias("ORDER_DATE"))
 
-	visit_list.show()
+	print("Count of visit list")
+	# print(visit_list.count())
 
-	# print("Count of visit list")
-	print(visit_list.count())
-#
-# auth_list = dataset_2 \
-# 	.select(col("VKORG"),
-# 			col("/SCL/AUTH_MATLST").alias("AUTH"),
-# 			col("MATNR"))
-#
-# auth_list.show(10)
-#
-# print("Count of auth list")
-# print(auth_list.count())
-#
-# visit_auth_condition = [visit_list.VKORG == auth_list.VKORG,
-# 						   visit_list.AUTH == auth_list.AUTH]
-#
-# visit_list_join_auth_list = visit_list \
-# 								.join(auth_list, on = visit_auth_condition)
+	auth_list = aglu_raw_df \
+		.select(col("VKORG"),
+				col("AUTH"),
+				col("MANDT"),
+				col("VTWEG"),
+				col("MATNR"))
+
+	print("Count of authorisation list")
+	# print(auth_list.count())
+
+	visit_auth_condition = [visit_list.VKORG == auth_list.VKORG,
+							visit_list.AUTH == auth_list.AUTH,
+							visit_list.MANDT == auth_list.MANDT,
+							visit_list.VTWEG == auth_list.VTWEG]
+
+	visit_list_join_auth_list = visit_list \
+		.join(auth_list, on = visit_auth_condition)
+
+	# visit_list_join_auth_list.show(10)
+	print("Count of joint dataset")
+	# print(visit_list_join_auth_list.count())
+
+	print("Dataset Verifications --- TEMPORARY\n\n")
+	print("VISIT LIST DATASET CHECK...\n")
+	a = visit_list \
+		.filter(col("ORDER_DATE") == '2018.02.01') \
+		.groupBy(col("KUNNR")).agg(count(col("MANDT")))
+
+	# a.show()
+
+	vl_raw_df.filter((col("KUNNR") == '0600231255') & (col("EXDAT") == '2018.02.01')).show()
+
 #
 #
 # print("Count of joined dataset")
