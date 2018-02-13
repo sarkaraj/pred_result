@@ -146,6 +146,7 @@ if __name__ == "__main__":
 	import numpy as np
 	from pyspark import SparkContext, SparkConf
 	from pyspark.sql import HiveContext, SQLContext
+	import properties as p_
 
 	# print np.busday_offset('2017-09-15', 2, roll='forward')
 	# print str(np.busday_offset('2017-09-15', 2, roll='forward'))
@@ -166,6 +167,8 @@ if __name__ == "__main__":
 
 	print "Setting LOG LEVEL as ERROR"
 	sc.setLogLevel("ERROR")
+
+	_repartitions = p_.REPARTITION_FACTOR
 
 	raw_vl_head = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_VL.csv").first()
 	raw_vl = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_VL.csv") \
@@ -188,13 +191,30 @@ if __name__ == "__main__":
 	vl_schema = _schema_vl()
 	aglu_schema = _schema_aglu()
 
-	vl_raw_df = sqlContext.createDataFrame(raw_vl, schema = vl_schema)
-	aglu_raw_df = sqlContext.createDataFrame(raw_aglu, schema = aglu_schema)
+	vl_raw_df = sqlContext.createDataFrame(raw_vl, schema = vl_schema) \
+		.repartition(_repartitions) \
+		.filter(col("VPTYP") == "ZR") \
+		.withColumn("EXDAT_F", from_unixtime(unix_timestamp(col("EXDAT"), "yyyy.MM.dd")).cast(DateType())) \
+		.drop(col("EXDAT")) \
+		.withColumnRenamed("EXDAT_F", "EXDAT")
+
+	# TODO: Add one more filter to filter out the dates as per the order_date
+
+	vl_raw_df.take(1)
+	vl_raw_df.cache()
+
+	aglu_raw_df = sqlContext.createDataFrame(raw_aglu, schema = aglu_schema) \
+		.coalesce(1)
+
+	aglu_raw_df.take(1)
+	aglu_raw_df.cache()
 
 	print("Visit List")
-	# vl_raw_df.show(10)
+	vl_raw_df.show(10)
+
+
 	print("Authorization List")
-	# aglu_raw_df.show(10)
+	aglu_raw_df.show(10)
 
 	visit_list = vl_raw_df \
 		.select(col("KUNNR"),
@@ -202,7 +222,8 @@ if __name__ == "__main__":
 				col("AUTH"),
 				col("VTWEG"),
 				col("MANDT"),
-				col("EXDAT").alias("ORDER_DATE"))
+				col("EXDAT").alias("ORDER_DATE")
+				)
 
 	print("Count of visit list")
 	# print(visit_list.count())
@@ -212,10 +233,12 @@ if __name__ == "__main__":
 				col("AUTH"),
 				col("MANDT"),
 				col("VTWEG"),
-				col("MATNR"))
+				col("MATNR")
+				)
 
 	print("Count of authorisation list")
 	# print(auth_list.count())
+	# auth_list.show(5)
 
 	visit_auth_condition = [visit_list.VKORG == auth_list.VKORG,
 							visit_list.AUTH == auth_list.AUTH,
@@ -223,21 +246,17 @@ if __name__ == "__main__":
 							visit_list.VTWEG == auth_list.VTWEG]
 
 	visit_list_join_auth_list = visit_list \
-		.join(auth_list, on = visit_auth_condition)
+		.join(broadcast(auth_list),
+			  on = visit_auth_condition,
+			  how = "left")
 
-	# visit_list_join_auth_list.show(10)
+
 	print("Count of joint dataset")
-	# print(visit_list_join_auth_list.count())
+	visit_list_join_auth_list.show(10)
+
 
 	print("Dataset Verifications --- TEMPORARY\n\n")
 	print("VISIT LIST DATASET CHECK...\n")
-	a = visit_list \
-		.filter(col("ORDER_DATE") == '2018.02.01') \
-		.groupBy(col("KUNNR")).agg(count(col("MANDT")))
-
-	# a.show()
-
-	vl_raw_df.filter((col("KUNNR") == '0600231255') & (col("EXDAT") == '2018.02.01')).show()
 
 #
 #
