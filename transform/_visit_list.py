@@ -83,7 +83,7 @@ def _get_visit_list (sc, sqlContext, order_date, **kwargs):
 	return vl_df
 
 
-# # NOT USED TILL NOW -- MOST LIKELY TO BE DELETED
+# # TODO: NOT USED TILL NOW -- MOST LIKELY TO BE DELETED
 def _get_generated_visit_list (sc, sqlContext):
 	invoice_q = """
     select d.customernumber customernumber, d.matnr matnr, d.bill_date bill_date, IF(d.units != 'CS', d.quantity * (
@@ -248,15 +248,36 @@ if __name__ == "__main__":
 	visit_list_join_auth_list = visit_list \
 		.join(broadcast(auth_list),
 			  on = visit_auth_condition,
-			  how = "left")
+			  how = "left") \
+		.drop(auth_list.VKORG) \
+		.drop(auth_list.AUTH) \
+		.drop(auth_list.MANDT) \
+		.drop(auth_list.VTWEG) \
+		.dropDuplicates()
 
 
 	print("Count of joint dataset")
 	visit_list_join_auth_list.show(10)
 
+#
+# print("Dataset Verifications --- TEMPORARY\n\n")
+# print("VISIT LIST DATASET CHECK...\n")
+#
+# visit_list_join_auth_list\
+# .groupBy(col("KUNNR"))\
+# .agg(count(col("MATNR")).alias("count_of_pdts"))\
+# .show()
+#
+# visit_list_join_auth_list\
+# .filter(col("KUNNR") == '0601756679')\
+# .groupBy(col("KUNNR"))\
+# .agg(countDistinct(col("MATNR")).alias("count_of_pdts"))\
+# .show()
+#
+# print(aglu_raw_df.select(col("MATNR")).distinct().count())
 
-	print("Dataset Verifications --- TEMPORARY\n\n")
-	print("VISIT LIST DATASET CHECK...\n")
+
+
 
 #
 #
