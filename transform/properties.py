@@ -48,7 +48,7 @@ invoice_q = """
 VISIT_LIST_LOCATION = "wasb://skuopt@conapocv2standardsa.blob.core.windows.net/cona.dsouth_Results_811_20171009142501.csv"
 AGLU_LIST_LOCATION = "wasb://skuopt@conapocv2standardsa.blob.core.windows.net/AZ_TCAS_AGLU.csv"
 
-REPARTITION_FACTOR = 1
+REPARTITION_FACTOR = 100
 
 if __name__ == "__main__":
     print invoice_q

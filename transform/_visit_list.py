@@ -138,6 +138,114 @@ def _get_generated_visit_list (sc, sqlContext):
 	return None
 
 
+def get_visit_list_w_mat_list (sc, sqlContext, **kwargs):
+	param_set = {"_repartitions": p_.REPARTITION_FACTOR,
+				 "vl_location": p_.VISIT_LIST_LOCATION,
+				 "aglu_location": p_.AGLU_LIST_LOCATION,
+				 "vl_schema": _schema_vl(),
+				 "aglu_schema": _schema_aglu(),
+				 "date_str_parse_format": "yyyy.MM.dd"
+				 }
+
+	for key in param_set.keys():
+		if key in kwargs.keys():
+			param_set[key] = kwargs[key]
+		else:
+			pass
+
+	_repartitions = param_set.get("_repartitions")
+	VISIT_LIST_LOCATION = param_set.get("vl_location")
+	AGLU_LIST_LOCATION = param_set.get("aglu_location")
+	vl_schema = param_set.get("vl_schema")
+	aglu_schema = param_set.get("aglu_schema")
+	date_str_parse_format = param_set.get("date_str_parse_format")
+
+	raw_vl_head = sc.textFile(VISIT_LIST_LOCATION).first()
+	raw_vl = sc.textFile(VISIT_LIST_LOCATION) \
+		.filter(lambda x: x != raw_vl_head) \
+		.map(lambda x: x.split(",")) \
+		.map(lambda x: [None if elem == "" else elem for elem in x])
+
+	# print(raw_vl.take(1))
+	# print(raw_vl_head)
+
+	raw_aglu_head = sc.textFile(AGLU_LIST_LOCATION).first()
+	raw_aglu = sc.textFile(AGLU_LIST_LOCATION) \
+		.filter(lambda x: x != raw_aglu_head) \
+		.map(lambda x: x.split(",")) \
+		.map(lambda x: [None if elem == "" else elem for elem in x])
+
+	# print(raw_aglu.take(1))
+	# print(raw_aglu_head)
+
+	vl_raw_df = sqlContext.createDataFrame(raw_vl, schema = vl_schema) \
+		.repartition(_repartitions) \
+		.filter(col("VPTYP") == "ZR") \
+		.withColumn("EXDAT_F", from_unixtime(unix_timestamp(col("EXDAT"), date_str_parse_format)).cast(DateType())) \
+		.drop(col("EXDAT")) \
+		.withColumnRenamed("EXDAT_F", "EXDAT")
+
+	# TODO: Add one more filter to filter out the dates as per the order_date
+
+	# vl_raw_df.take(1)
+	# vl_raw_df.cache()
+
+	aglu_raw_df = sqlContext.createDataFrame(raw_aglu, schema = aglu_schema) \
+		.coalesce(1)
+
+	# aglu_raw_df.take(1)
+	# aglu_raw_df.cache()
+
+	# print("Visit List")
+	# vl_raw_df.show(10)
+
+	# print("Authorization List")
+	# aglu_raw_df.show(10)
+
+	visit_list = vl_raw_df \
+		.select(rtrim(ltrim(col("KUNNR"))).alias("KUNNR"),
+				rtrim(ltrim(col("VKORG"))).alias("VKORG"),
+				rtrim(ltrim(col("AUTH"))).alias("AUTH"),
+				rtrim(ltrim(col("VTWEG"))).alias("VTWEG"),
+				rtrim(ltrim(col("MANDT"))).alias("MANDT"),
+				col("EXDAT").alias("ORDER_DATE")
+				)
+
+	# print("Count of visit list")
+	# print(visit_list.count())
+
+	auth_list = aglu_raw_df \
+		.select(rtrim(ltrim(col("VKORG"))).alias("VKORG"),
+				rtrim(ltrim(col("AUTH"))).alias("AUTH"),
+				rtrim(ltrim(col("MANDT"))).alias("MANDT"),
+				rtrim(ltrim(col("VTWEG"))).alias("VTWEG"),
+				rtrim(ltrim(col("MATNR"))).alias("MATNR")
+				) \
+		.dropDuplicates(["MATNR"]) \
+		.na.drop(how = 'any', subset = ["MATNR"])
+
+	# print("Count of authorisation list")
+	# print(auth_list.count())
+	# auth_list.show(5)
+
+	visit_auth_condition = [visit_list.VKORG == auth_list.VKORG,
+							visit_list.MANDT == auth_list.MANDT,
+							visit_list.VTWEG == auth_list.VTWEG,
+							visit_list.AUTH == auth_list.AUTH]
+
+	visit_list_join_auth_list = visit_list \
+		.join(broadcast(auth_list),
+			  on = visit_auth_condition,
+			  how = "left") \
+		.drop(auth_list.VKORG) \
+		.drop(auth_list.AUTH) \
+		.drop(auth_list.MANDT) \
+		.drop(auth_list.VTWEG) \
+		.na.drop(how = 'any', subset = ["MATNR"])
+
+	return visit_list_join_auth_list
+
+
 def blank_as_null (x):
 	return when(col(x) != "", col(x)).otherwise(None)
 
@@ -170,6 +278,13 @@ if __name__ == "__main__":
 
 	_repartitions = p_.REPARTITION_FACTOR
 
+	df = get_visit_list_w_mat_list(sc = sc, sqlContext = sqlContext,
+								   vl_location = "C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_VL.csv",
+								   aglu_location = "C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_AGLU.csv")
+
+	df.show(10)
+	print(df.count())
+
 	raw_vl_head = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_VL.csv").first()
 	raw_vl = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_VL.csv") \
 		.filter(lambda x: x != raw_vl_head) \
@@ -200,50 +315,52 @@ if __name__ == "__main__":
 
 	# TODO: Add one more filter to filter out the dates as per the order_date
 
-	vl_raw_df.take(1)
-	vl_raw_df.cache()
+	# vl_raw_df.take(1)
+	# vl_raw_df.cache()
 
 	aglu_raw_df = sqlContext.createDataFrame(raw_aglu, schema = aglu_schema) \
 		.coalesce(1)
 
-	aglu_raw_df.take(1)
-	aglu_raw_df.cache()
+	# aglu_raw_df.take(1)
+	# aglu_raw_df.cache()
 
-	print("Visit List")
-	vl_raw_df.show(10)
+	# print("Visit List")
+	# vl_raw_df.show(10)
 
-
-	print("Authorization List")
-	aglu_raw_df.show(10)
+	# print("Authorization List")
+	# aglu_raw_df.show(10)
 
 	visit_list = vl_raw_df \
-		.select(col("KUNNR"),
-				col("VKORG"),
-				col("AUTH"),
-				col("VTWEG"),
-				col("MANDT"),
+		.select(rtrim(ltrim(col("KUNNR"))).alias("KUNNR"),
+				rtrim(ltrim(col("VKORG"))).alias("VKORG"),
+				rtrim(ltrim(col("AUTH"))).alias("AUTH"),
+				rtrim(ltrim(col("VTWEG"))).alias("VTWEG"),
+				rtrim(ltrim(col("MANDT"))).alias("MANDT"),
 				col("EXDAT").alias("ORDER_DATE")
 				)
 
-	print("Count of visit list")
+	# print("Count of visit list")
 	# print(visit_list.count())
 
 	auth_list = aglu_raw_df \
-		.select(col("VKORG"),
-				col("AUTH"),
-				col("MANDT"),
-				col("VTWEG"),
-				col("MATNR")
-				)
+		.select(rtrim(ltrim(col("VKORG"))).alias("VKORG"),
+				rtrim(ltrim(col("AUTH"))).alias("AUTH"),
+				rtrim(ltrim(col("MANDT"))).alias("MANDT"),
+				rtrim(ltrim(col("VTWEG"))).alias("VTWEG"),
+				rtrim(ltrim(col("MATNR"))).alias("MATNR")
+				) \
+		.dropDuplicates(["MATNR"]) \
+		.dropna(how = 'any', subset = ["MATNR"])
 
-	print("Count of authorisation list")
+	# print("Count of authorisation list")
 	# print(auth_list.count())
 	# auth_list.show(5)
 
 	visit_auth_condition = [visit_list.VKORG == auth_list.VKORG,
-							visit_list.AUTH == auth_list.AUTH,
 							visit_list.MANDT == auth_list.MANDT,
-							visit_list.VTWEG == auth_list.VTWEG]
+							visit_list.VTWEG == auth_list.VTWEG,
+							visit_list.AUTH == auth_list.AUTH]
+
 
 	visit_list_join_auth_list = visit_list \
 		.join(broadcast(auth_list),
@@ -252,34 +369,54 @@ if __name__ == "__main__":
 		.drop(auth_list.VKORG) \
 		.drop(auth_list.AUTH) \
 		.drop(auth_list.MANDT) \
-		.drop(auth_list.VTWEG) \
-		.dropDuplicates()
+		.drop(auth_list.VTWEG)
 
 
 	print("Count of joint dataset")
 	visit_list_join_auth_list.show(10)
 
-#
-# print("Dataset Verifications --- TEMPORARY\n\n")
-# print("VISIT LIST DATASET CHECK...\n")
-#
-# visit_list_join_auth_list\
-# .groupBy(col("KUNNR"))\
-# .agg(count(col("MATNR")).alias("count_of_pdts"))\
-# .show()
-#
-# visit_list_join_auth_list\
-# .filter(col("KUNNR") == '0601756679')\
-# .groupBy(col("KUNNR"))\
-# .agg(countDistinct(col("MATNR")).alias("count_of_pdts"))\
-# .show()
-#
-# print(aglu_raw_df.select(col("MATNR")).distinct().count())
+	print(visit_list_join_auth_list.count())
 
-
-
-
+# 	print("Dataset Verifications --- TEMPORARY\n\n")
+# 	print("VISIT LIST DATASET CHECK...\n")
+#
+# 	auth_list\
+# 		.groupBy(["MANDT", "VKORG", "VTWEG", "AUTH"])\
+# 		.agg(count(col("MATNR")).alias("count"))\
+# 		.orderBy(col("count").desc())\
+# 		.show()
+# #
+#
+# 	auth_list\
+# 		.groupBy(["MANDT", "VKORG", "VTWEG", "AUTH"])\
+# 		.agg(countDistinct(col("MATNR")).alias("count"))\
+# 		.orderBy(col("count").desc())\
+# 		.show()
+#
+# 	visit_list_join_auth_list\
+# 		.groupBy(col("KUNNR"), col("ORDER_DATE"))\
+# 		.agg(count(col("MATNR")).alias("pdt_count"))\
+# 		.orderBy(col("pdt_count").desc())\
+# 		.show()
 #
 #
-# print("Count of joined dataset")
-# print(visit_list_join_auth_list.count())
+# 	visit_list_join_auth_list\
+# 		.filter(col("KUNNR")=='0600426408')\
+# 		.groupBy(col("KUNNR"), col("ORDER_DATE"))\
+# 		.agg(count(col("MATNR")).alias("pdt_count"))\
+# 		.orderBy(col("pdt_count").desc())\
+# 		.show()
+#
+# 	visit_list_join_auth_list\
+# 		.groupBy(col("KUNNR"), col("ORDER_DATE"))\
+# 		.agg(count(col("MATNR")).alias("pdt_count"))\
+# 		.orderBy(col("pdt_count"))\
+# 		.show()
+#
+#
+# 	visit_list_join_auth_list\
+# 		.filter(col("KUNNR")=='0601012094')\
+# 		.groupBy(col("KUNNR"), col("ORDER_DATE"))\
+# 		.agg(count(col("MATNR")).alias("pdt_count"))\
+# 		.orderBy(col("pdt_count"))\
+# 		.show()
