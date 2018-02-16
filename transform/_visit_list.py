@@ -283,99 +283,99 @@ if __name__ == "__main__":
 								   aglu_location = "C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_AGLU.csv")
 
 	df.show(10)
-	print(df.count())
-
-	raw_vl_head = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_VL.csv").first()
-	raw_vl = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_VL.csv") \
-		.filter(lambda x: x != raw_vl_head) \
-		.map(lambda x: x.split(",")) \
-		.map(lambda x: [None if elem == "" else elem for elem in x])
-
-	# print(raw_vl.take(1))
-	# print(raw_vl_head)
-
-	raw_aglu_head = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_AGLU.csv").first()
-	raw_aglu = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_AGLU.csv") \
-		.filter(lambda x: x != raw_aglu_head) \
-		.map(lambda x: x.split(",")) \
-		.map(lambda x: [None if elem == "" else elem for elem in x])
-
-	# print(raw_aglu.take(1))
-	# print(raw_aglu_head)
-
-	vl_schema = _schema_vl()
-	aglu_schema = _schema_aglu()
-
-	vl_raw_df = sqlContext.createDataFrame(raw_vl, schema = vl_schema) \
-		.repartition(_repartitions) \
-		.filter(col("VPTYP") == "ZR") \
-		.withColumn("EXDAT_F", from_unixtime(unix_timestamp(col("EXDAT"), "yyyy.MM.dd")).cast(DateType())) \
-		.drop(col("EXDAT")) \
-		.withColumnRenamed("EXDAT_F", "EXDAT")
-
-	# TODO: Add one more filter to filter out the dates as per the order_date
-
-	# vl_raw_df.take(1)
-	# vl_raw_df.cache()
-
-	aglu_raw_df = sqlContext.createDataFrame(raw_aglu, schema = aglu_schema) \
-		.coalesce(1)
-
-	# aglu_raw_df.take(1)
-	# aglu_raw_df.cache()
-
-	# print("Visit List")
-	# vl_raw_df.show(10)
-
-	# print("Authorization List")
-	# aglu_raw_df.show(10)
-
-	visit_list = vl_raw_df \
-		.select(rtrim(ltrim(col("KUNNR"))).alias("KUNNR"),
-				rtrim(ltrim(col("VKORG"))).alias("VKORG"),
-				rtrim(ltrim(col("AUTH"))).alias("AUTH"),
-				rtrim(ltrim(col("VTWEG"))).alias("VTWEG"),
-				rtrim(ltrim(col("MANDT"))).alias("MANDT"),
-				col("EXDAT").alias("ORDER_DATE")
-				)
-
-	# print("Count of visit list")
-	# print(visit_list.count())
-
-	auth_list = aglu_raw_df \
-		.select(rtrim(ltrim(col("VKORG"))).alias("VKORG"),
-				rtrim(ltrim(col("AUTH"))).alias("AUTH"),
-				rtrim(ltrim(col("MANDT"))).alias("MANDT"),
-				rtrim(ltrim(col("VTWEG"))).alias("VTWEG"),
-				rtrim(ltrim(col("MATNR"))).alias("MATNR")
-				) \
-		.dropDuplicates(["MATNR"]) \
-		.dropna(how = 'any', subset = ["MATNR"])
-
-	# print("Count of authorisation list")
-	# print(auth_list.count())
-	# auth_list.show(5)
-
-	visit_auth_condition = [visit_list.VKORG == auth_list.VKORG,
-							visit_list.MANDT == auth_list.MANDT,
-							visit_list.VTWEG == auth_list.VTWEG,
-							visit_list.AUTH == auth_list.AUTH]
-
-
-	visit_list_join_auth_list = visit_list \
-		.join(broadcast(auth_list),
-			  on = visit_auth_condition,
-			  how = "left") \
-		.drop(auth_list.VKORG) \
-		.drop(auth_list.AUTH) \
-		.drop(auth_list.MANDT) \
-		.drop(auth_list.VTWEG)
-
-
-	print("Count of joint dataset")
-	visit_list_join_auth_list.show(10)
-
-	print(visit_list_join_auth_list.count())
+# print(df.count())
+#
+# raw_vl_head = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_VL.csv").first()
+# raw_vl = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_VL.csv") \
+# 	.filter(lambda x: x != raw_vl_head) \
+# 	.map(lambda x: x.split(",")) \
+# 	.map(lambda x: [None if elem == "" else elem for elem in x])
+#
+# # print(raw_vl.take(1))
+# # print(raw_vl_head)
+#
+# raw_aglu_head = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_AGLU.csv").first()
+# raw_aglu = sc.textFile("C:\\Users\\Rajarshi Sarkar\\Desktop\\visit_list\\AZ_TCAS_AGLU.csv") \
+# 	.filter(lambda x: x != raw_aglu_head) \
+# 	.map(lambda x: x.split(",")) \
+# 	.map(lambda x: [None if elem == "" else elem for elem in x])
+#
+# # print(raw_aglu.take(1))
+# # print(raw_aglu_head)
+#
+# vl_schema = _schema_vl()
+# aglu_schema = _schema_aglu()
+#
+# vl_raw_df = sqlContext.createDataFrame(raw_vl, schema = vl_schema) \
+# 	.repartition(_repartitions) \
+# 	.filter(col("VPTYP") == "ZR") \
+# 	.withColumn("EXDAT_F", from_unixtime(unix_timestamp(col("EXDAT"), "yyyy.MM.dd")).cast(DateType())) \
+# 	.drop(col("EXDAT")) \
+# 	.withColumnRenamed("EXDAT_F", "EXDAT")
+#
+# # TODO: Add one more filter to filter out the dates as per the order_date
+#
+# # vl_raw_df.take(1)
+# # vl_raw_df.cache()
+#
+# aglu_raw_df = sqlContext.createDataFrame(raw_aglu, schema = aglu_schema) \
+# 	.coalesce(1)
+#
+# # aglu_raw_df.take(1)
+# # aglu_raw_df.cache()
+#
+# # print("Visit List")
+# # vl_raw_df.show(10)
+#
+# # print("Authorization List")
+# # aglu_raw_df.show(10)
+#
+# visit_list = vl_raw_df \
+# 	.select(rtrim(ltrim(col("KUNNR"))).alias("KUNNR"),
+# 			rtrim(ltrim(col("VKORG"))).alias("VKORG"),
+# 			rtrim(ltrim(col("AUTH"))).alias("AUTH"),
+# 			rtrim(ltrim(col("VTWEG"))).alias("VTWEG"),
+# 			rtrim(ltrim(col("MANDT"))).alias("MANDT"),
+# 			col("EXDAT").alias("ORDER_DATE")
+# 			)
+#
+# # print("Count of visit list")
+# # print(visit_list.count())
+#
+# auth_list = aglu_raw_df \
+# 	.select(rtrim(ltrim(col("VKORG"))).alias("VKORG"),
+# 			rtrim(ltrim(col("AUTH"))).alias("AUTH"),
+# 			rtrim(ltrim(col("MANDT"))).alias("MANDT"),
+# 			rtrim(ltrim(col("VTWEG"))).alias("VTWEG"),
+# 			rtrim(ltrim(col("MATNR"))).alias("MATNR")
+# 			) \
+# 	.dropDuplicates(["MATNR"]) \
+# 	.dropna(how = 'any', subset = ["MATNR"])
+#
+# # print("Count of authorisation list")
+# # print(auth_list.count())
+# # auth_list.show(5)
+#
+# visit_auth_condition = [visit_list.VKORG == auth_list.VKORG,
+# 						visit_list.MANDT == auth_list.MANDT,
+# 						visit_list.VTWEG == auth_list.VTWEG,
+# 						visit_list.AUTH == auth_list.AUTH]
+#
+#
+# visit_list_join_auth_list = visit_list \
+# 	.join(broadcast(auth_list),
+# 		  on = visit_auth_condition,
+# 		  how = "left") \
+# 	.drop(auth_list.VKORG) \
+# 	.drop(auth_list.AUTH) \
+# 	.drop(auth_list.MANDT) \
+# 	.drop(auth_list.VTWEG)
+#
+#
+# print("Count of joint dataset")
+# visit_list_join_auth_list.show(10)
+#
+# print(visit_list_join_auth_list.count())
 
 # 	print("Dataset Verifications --- TEMPORARY\n\n")
 # 	print("VISIT LIST DATASET CHECK...\n")
